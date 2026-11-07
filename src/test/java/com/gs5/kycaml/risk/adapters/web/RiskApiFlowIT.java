@@ -213,6 +213,19 @@ class RiskApiFlowIT {
     }
 
     @Test
+    @DisplayName("a request with no body is refused by the gate first: 401 unidentified, 403 wrong role, then 400")
+    void shouldCheckTheCallerBeforeLookingForABody() throws Exception {
+        mvc.perform(post("/api/risk-profiles/C-1/evaluations")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/risk-profiles/C-1/decisions")).andExpect(status().isUnauthorized());
+
+        callAs(ActorRole.AML_ANALYST_L1);
+        mvc.perform(post("/api/risk-profiles/C-1/evaluations")).andExpect(status().isForbidden());
+
+        callAs(ActorRole.ONBOARDING_SYSTEM);
+        mvc.perform(post("/api/risk-profiles/C-1/evaluations")).andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("a role that may not do the operation is refused with 403 (BR-02)")
     void shouldRefuseTheWrongRole() throws Exception {
         callAs(ActorRole.AML_ANALYST_L1);

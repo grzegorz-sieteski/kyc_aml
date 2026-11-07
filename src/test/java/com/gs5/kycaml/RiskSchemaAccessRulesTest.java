@@ -21,11 +21,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RiskSchemaAccessRulesTest {
 
     private static final Path SOURCES = Path.of("src/main/java/com/gs5/kycaml");
-    private static final Pattern QUERY_SQL = sqlOn("query");
-    private static final Pattern COMMAND_SQL = sqlOn("command");
+    private static final Pattern QUERY_SQL = tablesOf("query", "compliance_risk_view|front_office_status");
+    private static final Pattern COMMAND_SQL = tablesOf("command", "risk_profile_history|risk_profile|outbox");
 
-    private static Pattern sqlOn(String schema) {
-        return Pattern.compile("\\b(FROM|INTO|UPDATE|JOIN)\\s+" + schema + "\\.", Pattern.CASE_INSENSITIVE);
+    /** Any mention of a table of the schema, wherever it stands in the statement. */
+    private static Pattern tablesOf(String schema, String tables) {
+        return Pattern.compile("(?<![\\w.])" + schema + "\\.(" + tables + ")\\b", Pattern.CASE_INSENSITIVE);
     }
 
     private static List<Path> sources() {

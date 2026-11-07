@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Record a compliance decision: escalate, freeze or clear, each with the role it needs. */
@@ -46,7 +47,7 @@ class RecordComplianceDecisionResource {
      * is refused as such before being told the kind was wrong.
      */
     @PostMapping("/{customerNumber}/decisions")
-    ResponseEntity<Object> decide(@PathVariable String customerNumber, @RequestBody String body) {
+    ResponseEntity<Object> decide(@PathVariable String customerNumber, @RequestBody(required = false) @Nullable String body) {
         var raw = RequestBodies.read(json, body, RawRecordComplianceDecision.class)
                 .orElseGet(() -> new RawRecordComplianceDecision(null, null, null, null));
         var permission = RiskPermissions.forDecision(DecisionKind.parse(raw.kind()).orElse(DecisionKind.FREEZE_ASSETS));
@@ -89,10 +90,7 @@ class RecordComplianceDecisionResource {
     /** The one exhaustive mapping of every refusal of this operation (design section 10). */
     private static ResponseEntity<Object> refused(Refusal refusal) {
         return switch (refusal) {
-            case Refusal.Access(AccessRefusal.CallerNotIdentified _) -> problem(HttpStatus.UNAUTHORIZED,
-                    "caller-not-identified", "The caller could not be identified.");
-            case Refusal.Access(AccessRefusal.PermissionDenied(var role)) -> problem(HttpStatus.FORBIDDEN,
-                    "permission-denied", "The role " + role + " may not record this decision.");
+            case Refusal.Access(var access) -> ProblemResponses.access(access, "record this decision", INSTANCE);
             case Refusal.Rejected(RecordComplianceDecisionError.DecisionKindNotRecognised _) -> invalid(
                     "decision-kind-not-recognised", "The decision kind is not recognised.");
             case Refusal.Rejected(RecordComplianceDecisionError.CustomerNotFound _) -> problem(

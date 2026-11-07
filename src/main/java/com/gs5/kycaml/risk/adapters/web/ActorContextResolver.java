@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  * total bypass of BR-02. There is deliberately <strong>no such resolver in this repository at
  * all</strong> — not even a profile-gated one, because a bean that exists can be activated. The
  * tests do not need one: they inject the actor directly through
- * {@code ActorContext.callWith(actor, ...)}, which is what that helper is for.
+ * a {@code @Primary} subclass of this resolver that says who is calling.
  *
  * <p>This is also deliberately <strong>not</strong> a servlet filter wrapping
  * {@code chain.doFilter} in {@code ActorContext.runWith}: {@code doFilter} declares

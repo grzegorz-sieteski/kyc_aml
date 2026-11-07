@@ -1,5 +1,6 @@
 package com.gs5.kycaml.risk.adapters.web;
 
+import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -14,7 +15,10 @@ final class RequestBodies {
     private RequestBodies() {
     }
 
-    static <T> Optional<T> read(JsonMapper json, String body, Class<T> type) {
+    static <T> Optional<T> read(JsonMapper json, @Nullable String body, Class<T> type) {
+        if (body == null) {
+            return Optional.empty();
+        }
         try {
             return Optional.ofNullable(json.readValue(body, type));
         } catch (JacksonException unreadable) {

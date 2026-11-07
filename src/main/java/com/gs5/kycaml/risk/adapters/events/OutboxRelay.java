@@ -20,11 +20,14 @@ import java.util.stream.Collectors;
  * {@code FOR UPDATE SKIP LOCKED}, so several relays never take the same row, and the claimed rows
  * of one profile are projected in version order on the partition of that profile. Partitions run in
  * parallel on virtual threads. A row that cannot be projected stays pending with its attempt
- * counted, and is tried after the rows that have failed less.
+ * counted, until it has failed {@value #MAX_ATTEMPTS} times; then it is no longer claimed and stays
+ * visible as a pending row with a high attempt count.
  */
 public class OutboxRelay {
 
     private static final int PARTITIONS = 16;
+    /** A row that failed this often is left pending but no longer claimed, so it cannot starve the rest. */
+    private static final int MAX_ATTEMPTS = 10;
 
     private final JdbcClient jdbc;
     private final ViewProjector projector;
@@ -51,11 +54,12 @@ public class OutboxRelay {
         var claimed = jdbc.sql("""
                         SELECT event_id, profile_id, tenant_id, customer_number, aggregate_version, view::text AS view
                         FROM command.outbox
-                        WHERE status = 'PENDING'
-                        ORDER BY attempts, created_at, aggregate_version
+                        WHERE status = 'PENDING' AND attempts < :maxAttempts
+                        ORDER BY created_at, aggregate_version
                         LIMIT :batchSize
                         FOR UPDATE SKIP LOCKED
                         """)
+                .param("maxAttempts", MAX_ATTEMPTS)
                 .param("batchSize", batchSize)
                 .query((rs, row) -> new Claimed(rs.getObject("event_id", UUID.class),
                         rs.getObject("profile_id", UUID.class),
@@ -63,18 +67,18 @@ public class OutboxRelay {
                                 rs.getLong("aggregate_version"), rs.getString("view"))))
                 .list();
         var delivered = new ConcurrentLinkedQueue<UUID>();
-        var failed = new ConcurrentLinkedQueue<UUID>();
         var partitions = claimed.stream().collect(Collectors.groupingBy(
                 row -> Math.floorMod(row.profileId().hashCode(), PARTITIONS)));
         var workers = partitions.values().stream()
                 .map(rows -> Thread.ofVirtual().start(() -> rows.stream()
                         .sorted(Comparator.comparingLong(row -> row.projection().version()))
-                        .forEach(row -> (projector.project(row.projection()).isSuccess() ? delivered : failed)
-                                .add(row.eventId()))))
+                        .forEach(row -> projector.project(row.projection())
+                                .peek(projected -> delivered.add(row.eventId())))))
                 .toList();
         workers.forEach(this::await);
         markDelivered(List.copyOf(delivered));
-        countAttempt(List.copyOf(failed));
+        // Whatever was claimed and not delivered counts an attempt, including a worker that died.
+        countAttempt(claimed.stream().map(Claimed::eventId).filter(id -> !delivered.contains(id)).toList());
         return delivered.size();
     }
 

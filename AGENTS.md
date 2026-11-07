@@ -116,14 +116,11 @@ Be honest about this, because the distinction matters:
 
 ## Known state of this repository
 
-- No business module exists yet. The repository holds the AI SDLC harness, the build with its
-  gates, and the shared kernel, cloned from `underwriting-service`. The first module, customer
-  risk scoring, is specified from the ARGON analysis (an AML/KYC/CTF specification and
-  architecture produced with Gemini and supplied by the product owner).
-  `docs/workflow/customer-risk-scoring-state.md` records what each stage found.
-- `ActorRole` still carries the three roles of the template project (`VIEWER`, `UNDERWRITER`,
-  `SENIOR_UNDERWRITER`). They are replaced by the roles the KYC specification confirms, in the
-  stages that follow. Until then nothing in this repository uses them for a business decision.
+- One business module exists: `risk` (customer risk scoring), specified from the ARGON analysis (an
+  AML/KYC/CTF specification and architecture produced with Gemini and supplied by the product owner).
+  `docs/workflow/customer-risk-scoring-state.md` records what each stage found. `ActorRole` carries
+  the KYC roles. There is no identity source yet: the resolver is fail-closed, so every call is 401
+  until one is chosen.
 - **NullAway runs on `src/main` at compile time** (Error Prone 2.52 + NullAway 0.14.3). It needs the
   `--add-exports` flags in `.mvn/jvm.config`, which `./mvnw` picks up automatically. If you build
   with another Maven (IntelliJ's bundled one included), point it at that file or the compile fails
@@ -136,4 +133,4 @@ Be honest about this, because the distinction matters:
 - `src/test/resources/archunit.properties` sets `archRule.failOnEmptyShould=true`, and there is no
   per-rule escape hatch left anywhere. Keep it that way: with it false, a typo in a package name
   turns a rule into a green test that checks nothing, and you will trust it.
-- `openapi/` is empty: there is no contract to publish until there is an endpoint.
+- `openapi/` is empty: the four endpoints of `risk` have no published contract yet.

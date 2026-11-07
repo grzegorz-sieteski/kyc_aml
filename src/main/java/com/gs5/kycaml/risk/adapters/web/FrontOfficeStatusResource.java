@@ -63,10 +63,7 @@ class FrontOfficeStatusResource {
     /** The one exhaustive mapping of every refusal of this operation (design section 10). */
     private static ResponseEntity<Object> refused(Refusal refusal) {
         return switch (refusal) {
-            case Refusal.Access(AccessRefusal.CallerNotIdentified _) -> problem(HttpStatus.UNAUTHORIZED,
-                    "caller-not-identified", "The caller could not be identified.");
-            case Refusal.Access(AccessRefusal.PermissionDenied _) -> problem(HttpStatus.FORBIDDEN,
-                    "permission-denied", "The caller may not read this status.");
+            case Refusal.Access(var access) -> ProblemResponses.access(access, "read this status", INSTANCE);
             case Refusal.Rejected(FrontOfficeStatusError.CustomerNotFound _) -> problem(HttpStatus.NOT_FOUND,
                     "customer-not-found", "The customer was not found.");
         };

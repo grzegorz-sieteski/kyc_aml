@@ -60,10 +60,7 @@ class ComplianceRiskViewResource {
     /** The one exhaustive mapping of every refusal of this operation (design section 10). */
     private static ResponseEntity<Object> refused(Refusal refusal) {
         return switch (refusal) {
-            case Refusal.Access(AccessRefusal.CallerNotIdentified _) -> problem(HttpStatus.UNAUTHORIZED,
-                    "caller-not-identified", "The caller could not be identified.");
-            case Refusal.Access(AccessRefusal.PermissionDenied(var role)) -> problem(HttpStatus.FORBIDDEN,
-                    "permission-denied", "The role " + role + " may not view the compliance view.");
+            case Refusal.Access(var access) -> ProblemResponses.access(access, "view the compliance view", INSTANCE);
             case Refusal.Rejected(ComplianceRiskViewError.CustomerNotFound _) -> problem(HttpStatus.NOT_FOUND,
                     "customer-not-found", "The customer was not found.");
         };

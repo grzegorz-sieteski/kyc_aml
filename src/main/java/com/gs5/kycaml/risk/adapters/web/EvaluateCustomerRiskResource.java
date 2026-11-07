@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Evaluate a customer's risk: the onboarding system's door into the scoring core. */
@@ -45,7 +46,7 @@ class EvaluateCustomerRiskResource {
      * the caller is admitted, so a caller who may not evaluate learns nothing from the input.
      */
     @PostMapping("/{customerNumber}/evaluations")
-    ResponseEntity<Object> evaluate(@PathVariable String customerNumber, @RequestBody String body) {
+    ResponseEntity<Object> evaluate(@PathVariable String customerNumber, @RequestBody(required = false) @Nullable String body) {
         return gate.admit(actorContextResolver.resolve())
                 .fold(admission -> evaluateAdmitted(admission, customerNumber, body),
                         access -> refused(new Refusal.Access(access)));
@@ -58,7 +59,7 @@ class EvaluateCustomerRiskResource {
 
     private ResponseEntity<Object> evaluateAdmitted(
             Admission<EvaluateCustomerRiskCommand, Result<RiskProfileVersion, EvaluateCustomerRiskError>> admission,
-            String customerNumber, String body) {
+            String customerNumber, @Nullable String body) {
         var raw = RequestBodies.read(json, body, RawEvaluateCustomerRisk.class)
                 .orElseGet(() -> new RawEvaluateCustomerRisk(null, null, null, null, null, null, null, null, null,
                         null, null, null));
@@ -90,10 +91,7 @@ class EvaluateCustomerRiskResource {
     /** The one exhaustive mapping of every refusal of this operation (design section 10). */
     private static ResponseEntity<Object> refused(Refusal refusal) {
         return switch (refusal) {
-            case Refusal.Access(AccessRefusal.CallerNotIdentified _) -> problem(HttpStatus.UNAUTHORIZED,
-                    "caller-not-identified", "The caller could not be identified.");
-            case Refusal.Access(AccessRefusal.PermissionDenied(var role)) -> problem(HttpStatus.FORBIDDEN,
-                    "permission-denied", "The role " + role + " may not evaluate customer risk.");
+            case Refusal.Access(var access) -> ProblemResponses.access(access, "evaluate customer risk", INSTANCE);
             case Refusal.Rejected(EvaluateCustomerRiskError.CustomerNumberMissing _) -> invalid(
                     "customer-number-missing", "The customer number is missing.");
             case Refusal.Rejected(EvaluateCustomerRiskError.CustomerNumberTooLong _) -> invalid(

@@ -12,6 +12,8 @@ import com.gs5.kycaml.risk.domain.RiskProfileVersion;
 import com.gs5.kycaml.risk.domain.RiskTrack;
 import com.gs5.kycaml.shared.kernel.Result;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -39,6 +41,7 @@ import java.util.UUID;
 @Component
 public class RiskProfileSqlAdapter implements RiskProfileRepository {
 
+    private static final Logger LOG = LoggerFactory.getLogger(RiskProfileSqlAdapter.class);
     private static final long FIRST_VERSION = 1L;
 
     private final JdbcClient jdbc;
@@ -193,6 +196,8 @@ public class RiskProfileSqlAdapter implements RiskProfileRepository {
                     evaluation, instant(rs, "evaluated_at"), decidedTrack, decision, rs.getLong("version"),
                     instant(rs, "updated_at")));
         } catch (JacksonException unreadable) {
+            LOG.error("Stored risk profile {} cannot be read back and is treated as not found",
+                    rs.getObject("id", UUID.class));
             return Optional.empty();
         }
     }
