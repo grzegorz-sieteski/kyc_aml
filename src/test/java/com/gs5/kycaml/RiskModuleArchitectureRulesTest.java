@@ -111,6 +111,7 @@ class RiskModuleArchitectureRulesTest {
     static final ArchRule raw_text_enters_only_through_parse =
             methods()
                     .that().areDeclaredInClassesThat().resideInAPackage("..risk.domain..")
+                    .and().haveModifier(JavaModifier.PUBLIC)
                     .and().doNotHaveModifier(JavaModifier.SYNTHETIC)
                     .and(new DescribedPredicate<JavaMethod>("taking a String parameter") {
                         @Override
@@ -126,8 +127,12 @@ class RiskModuleArchitectureRulesTest {
                         }
                     })
                     .should().haveName("parse")
-                    .because("raw text enters the domain only as the parameter of a method named parse; "
-                            + "anywhere else a String parameter is an unchecked value reaching business code");
+                    .because("raw text enters the domain only as the parameter of a public method named parse; "
+                            + "anywhere else a public String parameter is an unchecked value reaching business code. "
+                            + "Scoped to public methods on purpose: the first version covered every method and "
+                            + "failed on private helpers of a parse and on the aggregate's String actor id, which "
+                            + "comes from the admitted ActorContext and is not request text (found at GREEN, "
+                            + "fixed by the test designer)");
 
     // ------------------------------------------------------------- commands and queries
 
