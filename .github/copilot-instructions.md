@@ -57,7 +57,7 @@ Architecture: package-by-feature, Hexagonal boundaries, CQRS, Railway Oriented P
 | `ThreadLocal` | `ScopedValue` via `ActorContext` | ArchUnit + Checkstyle |
 | `catch (Exception \| Throwable \| RuntimeException)` | catch the specific type | Checkstyle `noCatchAll` |
 | `KafkaTemplate` outside `adapters/messaging` | Transactional Outbox relay | ArchUnit |
-| Spring, Jackson, Kafka imports in `domain/` or `query/` | ports; adapters do the wiring | ArchUnit |
+| Spring, Jackson, Kafka imports in `domain/` | ports; adapters do the wiring | ArchUnit |
 | Magic numbers in business logic | Named constants (`public static final`) or Value Objects | Checkstyle `noMagicNumbers` |
 | Field injection (`@Autowired` / `@Inject` on fields) | Explicit constructor injection | ArchUnit `no_field_injection` + Checkstyle `noFieldAutowired` |
 
@@ -72,11 +72,10 @@ com.gs5.kycaml
 └── <module>/                   one business capability, e.g. submission/
     ├── domain/                 WRITE side. Pure Java. Aggregate is package-private.
     │                           Public: *UseCase, *Command records, *Error, ports, events
-    ├── query/                  READ side. Projections only. Cannot see domain/ (compiler-enforced)
     └── adapters/               web/ persistence/ messaging/ config/
 ```
 
-`domain/` and `query/` may depend only on `java.*`, `com.gs5.kycaml.shared.kernel.*`
+`domain/` may depend only on `java.*`, `com.gs5.kycaml.shared.kernel.*`
 and `org.jspecify.*`.
 
 ## 3. Commands and queries
@@ -91,7 +90,10 @@ when approving one.
 file, and its constructor collects every port any method needs. Instead:
 
 - write side, in `domain/`: `RegisterSubmissionUseCase.execute(RegisterSubmissionCommand)`
-- read side, in `query/`: `SearchSubmissionsUseCase.ask(SearchSubmissionsQuery)`
+- read side, also in `domain/`: `SearchSubmissionsUseCase.ask(SearchSubmissionsQuery)`. There is no
+  `query/` package: a read use case is told from a write one by its single public method, `ask`,
+  and it never touches an aggregate, a write repository or an event publisher. CQRS separation of
+  storage, where wanted, lives in the database (separate schemas), not in a package
 
 Each returns its own `Result<T, ThatOperationsError>`, and its constructor takes only the ports
 that one operation needs. A new operation is a new class, never a new method on an existing one.

@@ -26,7 +26,7 @@ com.gs5.kycaml.<module>/
 │   ├── <M>Snapshot.java                      public — immutable state for persistence
 │   ├── <M>DomainEvent.java                   public sealed interface
 │   └── <M>.java                              PACKAGE-PRIVATE aggregate
-├── query/                                    READ SIDE — cannot see domain/
+├── (no query/ package: read use cases with ask() live in domain/ as well)
 │   ├── package-info.java
 │   ├── <Query>UseCase.java                   public — ONE read, one public ask(...)
 │   ├── <M>SearchQuery.java                   public record
@@ -185,8 +185,8 @@ a SQL fragment or an internal id.
 - [ ] `./mvnw verify` passes, and you pasted the real output
 - [ ] The aggregate class is package-private
 - [ ] No `throw new` anywhere in `src/main` (Checkstyle enforces this; run it)
-- [ ] `domain/` and `query/` import nothing from Spring, Jackson or Kafka
-- [ ] `query/` does not import `domain/`
+- [ ] `domain/` imports nothing from Spring, Jackson or Kafka
+- [ ] read use cases (`ask`) do not depend on aggregates, write repositories or event publishers
 - [ ] Every `*Error` variant has a test that produces it
 - [ ] The mapper carries `version` both ways, and an `*IT` proves insert works
 - [ ] Every SQL parameter is bound; every query filters by tenant

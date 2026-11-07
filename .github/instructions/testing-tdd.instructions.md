@@ -16,7 +16,7 @@ Naming decides which plugin runs the file. A slow test named `*Test` poisons the
 
 ## Unit tests: fakes, not mocks
 
-Do not use Mockito for `domain/` or `query/`. Write a deterministic fake in the test tree:
+Do not use Mockito for `domain/. Write a deterministic fake in the test tree:
 
 ```java
 final class InMemorySubmissionCommandRepository implements SubmissionCommandRepository {

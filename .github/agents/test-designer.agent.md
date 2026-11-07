@@ -52,7 +52,7 @@ assertThat(result).isEqualTo(
 Not `assertThat(result.isFailure()).isTrue()`, which passes while the error is entirely wrong.
 Never `assertThatThrownBy` for a business rule — business rules return failures here.
 
-**Fakes, not mocks,** for ports in `domain/` and `query/`: a `ConcurrentHashMap`-backed
+**Fakes, not mocks,** for ports in `domain/: a `ConcurrentHashMap`-backed
 `InMemory*Repository` in the test tree. A fake tests behaviour; a mock tests that you called the
 method you already decided to call.
 

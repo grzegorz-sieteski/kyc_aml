@@ -16,7 +16,7 @@ to apply.
 ## What to check
 
 ### 1. Architecture and CQRS
-- `[BLOCKER]` imports between `domain/` and `query/` in either direction
+- `[BLOCKER]` a `query/` package, or a read use case (`ask`) depending on an aggregate, a write repository or an event publisher
 - `[BLOCKER]` any `*Service`, `*Manager`, `*Helper`, `*Util`, or custom `*Exception`
 - `[BLOCKER]` `throw` in business logic — failures are `Result.failure(...)`
 - `[CRITICAL]` a shared `Command`/`Query` interface or a generic `handle()` — each operation takes

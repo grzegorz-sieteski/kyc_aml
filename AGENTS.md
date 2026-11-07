@@ -1,6 +1,7 @@
 # AGENTS.md — operating manual for this repository
 
-Backend service. **Java 25 LTS**, **Spring Boot 4.1.2**, Maven, PostgreSQL, Apache Kafka.
+Backend service. **Java 25 LTS**, **Spring Boot 4.1.2**, Maven, PostgreSQL. Events go through a transactional outbox and an in-process partitioned bus;
+there is no message broker (product owner decision 2026-11-07, design H-08).
 Read this before anything else; `.github/copilot-instructions.md` holds the hard bans.
 
 ## Commands
@@ -12,7 +13,7 @@ Read this before anything else; `.github/copilot-instructions.md` holds the hard
 ./mvnw -B verify -DskipITs                           # skip ITs when Docker is unavailable
 ./mvnw -B test -Dtest=ArchitectureRulesTest          # architecture rules only
 ./mvnw -B test -Dtest=ResultTest                     # one test class
-./mvnw -B spring-boot:run                            # run locally (needs Postgres + Kafka)
+./mvnw -B spring-boot:run                            # run locally (needs Postgres)
 ```
 
 JDK 25 is required. Integration tests (`*IT.java`) need a running Docker daemon.

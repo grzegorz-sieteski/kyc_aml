@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 3 · Status: READY_FOR_NEXT (design awaiting product owner review)
+Stage: 3 · Status: IN_PROGRESS (design confirmed by the product owner 2026-11-07)
 Updated: 2026-11-07
 
 ## Source

@@ -1,5 +1,5 @@
 ---
-description: "Rules for domain/ (write side) and query/ (read side): purity, encapsulation, failures as values"
+description: "Rules for domain/ (write and read use cases): purity, encapsulation, failures as values"
 applyTo: "**/{domain,query}/**/*.java"
 ---
 
@@ -92,10 +92,11 @@ JDBC adapter from reaching past the use case. The compiler enforces it for free.
   (e.g., `SubmissionId(UUID value)` instead of bare `UUID`).
 - Value Objects encapsulate validation and format rules at instantiation.
 
-## `query/` is a separate world
+## Read use cases live in `domain/` too
 
-`query/` cannot import `domain/`, and `domain/` cannot import `query/` — both directions are
-blocked by ArchUnit, and the package-private aggregate blocks it at compile time anyway.
+There is no `query/` package (`architect.agent.md` makes one a `[BLOCKER]`). A read use case exposes
+one public `ask` and never depends on an aggregate, a write repository or an event publisher;
+ArchUnit enforces it.
 
 - A query returns a projection record (`*View`), never an aggregate.
 - A `*UseCase` validates the query (pagination bounds, tenant) and returns
@@ -105,7 +106,7 @@ blocked by ArchUnit, and the package-private aggregate blocks it at compile time
 ## Commands and queries are standalone records
 
 No shared `Command` interface, no `handle(Command)`, no facade. Each operation is its own
-`*UseCase` class with exactly one public method — `execute` in `domain/`, `ask` in `query/` —
+`*UseCase` class with exactly one public method — `execute` for a command, `ask` for a query, both in `domain/` —
 taking its own record and returning its own `Result`. A command may carry a masking
 `toString()` when it holds sensitive data:
 

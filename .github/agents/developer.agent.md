@@ -46,7 +46,7 @@ Follow `.github/skills/hexagonal-cqrs-slice/SKILL.md`. Read
   handle it as a `Result`.
 - Compose with `.map`, `.flatMap`, `.ensure`, `.fold` rather than a staircase of early returns.
 - Exhaustive `switch` over sealed types, no `default` branch.
-- No `@Service` or `@Component` in `domain/` or `query/`; beans are declared in `adapters/config/`.
+- No `@Service` or `@Component` in `domain/; beans are declared in `adapters/config/`.
 - `*JdbcEntity` carrying a domain-generated UUID **must** have `@Version @Nullable Long version`,
   and the mapper must carry it both ways — otherwise saving a new aggregate issues an UPDATE that
   affects zero rows, and you will only find out under concurrency.
