@@ -14,6 +14,7 @@ public record RiskProfileSnapshot(
         UUID tenantId,
         CustomerNumber customerNumber,
         Evaluation latestEvaluation,
+        Instant evaluatedAt,
         @Nullable RiskTrack decidedTrack,
         @Nullable DecisionRecord latestDecision,
         @Nullable Long version,

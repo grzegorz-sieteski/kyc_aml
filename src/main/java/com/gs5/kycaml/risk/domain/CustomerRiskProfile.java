@@ -29,12 +29,13 @@ final class CustomerRiskProfile {
     private final CustomerNumber customerNumber;
     private final @Nullable Long version;
     private final Evaluation latestEvaluation;
+    private final Instant evaluatedAt;
     private final @Nullable RiskTrack decidedTrack;
     private final @Nullable DecisionRecord latestDecision;
     private final Instant updatedAt;
 
     private CustomerRiskProfile(RiskProfileId id, UUID tenantId, CustomerNumber customerNumber,
-                                @Nullable Long version, Evaluation latestEvaluation,
+                                @Nullable Long version, Evaluation latestEvaluation, Instant evaluatedAt,
                                 @Nullable RiskTrack decidedTrack, @Nullable DecisionRecord latestDecision,
                                 Instant updatedAt) {
         this.id = id;
@@ -42,6 +43,7 @@ final class CustomerRiskProfile {
         this.customerNumber = customerNumber;
         this.version = version;
         this.latestEvaluation = latestEvaluation;
+        this.evaluatedAt = evaluatedAt;
         this.decidedTrack = decidedTrack;
         this.latestDecision = latestDecision;
         this.updatedAt = updatedAt;
@@ -50,7 +52,7 @@ final class CustomerRiskProfile {
     /** The first evaluation of a customer in a booking centre (BR-29). */
     static Outcome create(RiskProfileId id, UUID tenantId, EvaluateCustomerRiskCommand inputs,
                           Evaluation evaluation, String actorId, Instant now, UUID eventId) {
-        var created = new CustomerRiskProfile(id, tenantId, inputs.customerNumber(), null, evaluation,
+        var created = new CustomerRiskProfile(id, tenantId, inputs.customerNumber(), null, evaluation, now,
                 null, null, now);
         return created.evaluated(inputs, evaluation, actorId, now, eventId);
     }
@@ -59,7 +61,7 @@ final class CustomerRiskProfile {
     static CustomerRiskProfile reconstitute(RiskProfileSnapshot snapshot) {
         return new CustomerRiskProfile(new RiskProfileId(snapshot.id()), snapshot.tenantId(),
                 snapshot.customerNumber(), snapshot.version(), snapshot.latestEvaluation(),
-                snapshot.decidedTrack(), snapshot.latestDecision(), snapshot.updatedAt());
+                snapshot.evaluatedAt(), snapshot.decidedTrack(), snapshot.latestDecision(), snapshot.updatedAt());
     }
 
     /**
@@ -68,7 +70,7 @@ final class CustomerRiskProfile {
      */
     Outcome reevaluate(EvaluateCustomerRiskCommand inputs, Evaluation evaluation, String actorId, Instant now,
                        UUID eventId) {
-        return new CustomerRiskProfile(id, tenantId, customerNumber, version, evaluation, decidedTrack,
+        return new CustomerRiskProfile(id, tenantId, customerNumber, version, evaluation, now, decidedTrack,
                 latestDecision, now).evaluated(inputs, evaluation, actorId, now, eventId);
     }
 
@@ -98,7 +100,7 @@ final class CustomerRiskProfile {
         };
         var decision = new DecisionRecord(kind, actorId, now, justification.value(), versionViewed.value());
         var next = new CustomerRiskProfile(id, tenantId, customerNumber, version, latestEvaluation,
-                newDecidedTrack, decision, now);
+                evaluatedAt, newDecidedTrack, decision, now);
         var effective = next.effectiveTrack();
         var event = new RiskDomainEvent.ComplianceDecisionRecorded(eventId, tenantId, customerNumber,
                 next.nextVersion(), kind, newDecidedTrack, effective, AccountRestriction.of(effective),
@@ -108,8 +110,8 @@ final class CustomerRiskProfile {
 
     /** What the persistence adapter stores; the version stays exactly as loaded. */
     RiskProfileSnapshot toSnapshot() {
-        return new RiskProfileSnapshot(id.value(), tenantId, customerNumber, latestEvaluation, decidedTrack,
-                latestDecision, version, updatedAt);
+        return new RiskProfileSnapshot(id.value(), tenantId, customerNumber, latestEvaluation, evaluatedAt,
+                decidedTrack, latestDecision, version, updatedAt);
     }
 
     private Outcome evaluated(EvaluateCustomerRiskCommand inputs, Evaluation evaluation, String actorId,
