@@ -63,6 +63,7 @@ class EvaluateCustomerRiskUseCaseTest {
         assertThat(stored.decidedTrack()).isNull();
         assertThat(stored.latestDecision()).isNull();
         assertThat(stored.updatedAt()).isEqualTo(NOW);
+        assertThat(stored.evaluatedAt()).isEqualTo(NOW);
     }
 
     @Test

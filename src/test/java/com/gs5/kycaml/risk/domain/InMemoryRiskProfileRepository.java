@@ -50,7 +50,7 @@ final class InMemoryRiskProfileRepository implements RiskProfileRepository {
         }
         long next = expected == null ? 1L : expected + 1L;
         profiles.put(key, new RiskProfileSnapshot(snapshot.id(), snapshot.tenantId(),
-                snapshot.customerNumber(), snapshot.latestEvaluation(), snapshot.decidedTrack(),
+                snapshot.customerNumber(), snapshot.latestEvaluation(), snapshot.evaluatedAt(), snapshot.decidedTrack(),
                 snapshot.latestDecision(), next, snapshot.updatedAt()));
         facts.add(fact);
         events.addAll(announced);
@@ -62,7 +62,7 @@ final class InMemoryRiskProfileRepository implements RiskProfileRepository {
         var key = new Key(tenantId, customerNumber);
         var stored = profiles.get(key);
         profiles.put(key, new RiskProfileSnapshot(stored.id(), stored.tenantId(), stored.customerNumber(),
-                stored.latestEvaluation(), stored.decidedTrack(), stored.latestDecision(),
+                stored.latestEvaluation(), stored.evaluatedAt(), stored.decidedTrack(), stored.latestDecision(),
                 stored.version() + 1L, stored.updatedAt()));
     }
 

@@ -185,6 +185,22 @@ class RecordComplianceDecisionUseCaseTest {
     }
 
     @Test
+    @DisplayName("a decision moves the update moment but not the moment of the latest evaluation (spec query 1)")
+    void shouldKeepTheMomentOfTheLatestEvaluationWhenADecisionIsRecorded() {
+        exposed("C-1");
+        var later = NOW.plusSeconds(3_600);
+        var laterDecide = new RecordComplianceDecisionUseCase(repository, new FixedRiskProfileIdGenerator(),
+                Clock.fixed(later, ZoneOffset.UTC));
+
+        laterDecide.execute(L2_IN_DE, decision("C-1", DecisionKind.FREEZE_ASSETS, 1L));
+
+        var profile = stored("C-1");
+        assertThat(profile.evaluatedAt()).isEqualTo(NOW);
+        assertThat(profile.updatedAt()).isEqualTo(later);
+        assertThat(profile.latestDecision().decidedAt()).isEqualTo(later);
+    }
+
+    @Test
     @DisplayName("the decision event carries the decider but no justification field at all (A-31, BR-43)")
     void shouldNotCarryTheJustificationInTheEvent() {
         exposed("C-1");
