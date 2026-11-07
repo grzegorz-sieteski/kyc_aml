@@ -13,9 +13,10 @@ public final class GetComplianceRiskViewUseCase {
     }
 
     /** Reads only within the caller's own booking centre (BR-39). */
-    @SuppressWarnings("NullAway")
     public Result<ComplianceRiskView, ComplianceRiskViewError> ask(
             ActorContext actor, ComplianceRiskViewQuery query) {
-        return null;
+        return Result.<ComplianceRiskView, ComplianceRiskViewError>fromOptional(
+                reader.find(actor.tenantId(), query.customerNumber()),
+                ComplianceRiskViewError.CustomerNotFound::new);
     }
 }

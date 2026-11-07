@@ -13,9 +13,12 @@ public final class GetFrontOfficeStatusUseCase {
     }
 
     /** Reads only within the caller's own booking centre, and shows no risk information (BR-40). */
-    @SuppressWarnings("NullAway")
     public Result<FrontOfficeStatusView, FrontOfficeStatusError> ask(
             ActorContext actor, FrontOfficeStatusQuery query) {
-        return null;
+        return Result.<FrontOfficeStatusView, FrontOfficeStatusError>fromOptional(
+                reader.find(actor.tenantId(), query.customerNumber())
+                        .map(status -> new FrontOfficeStatusView(
+                                query.customerNumber().value(), status, status.message())),
+                FrontOfficeStatusError.CustomerNotFound::new);
     }
 }

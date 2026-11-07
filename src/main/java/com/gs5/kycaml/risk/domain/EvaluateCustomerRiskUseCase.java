@@ -27,9 +27,24 @@ public final class EvaluateCustomerRiskUseCase {
      * Success returns the new version of the customer's risk profile. The first evaluation of a
      * customer in a booking centre creates the profile at version 1 (BR-29).
      */
-    @SuppressWarnings("NullAway")
     public Result<RiskProfileVersion, EvaluateCustomerRiskError> execute(
             ActorContext actor, EvaluateCustomerRiskCommand command) {
-        return null;
+        return bookingCentres.jurisdictionOf(actor.tenantId())
+                .map(jurisdiction -> evaluateIn(jurisdiction, actor, command))
+                .orElseGet(() -> Result.failure(new EvaluateCustomerRiskError.BookingCentreUnknown()));
+    }
+
+    private Result<RiskProfileVersion, EvaluateCustomerRiskError> evaluateIn(
+            Jurisdiction jurisdiction, ActorContext actor, EvaluateCustomerRiskCommand command) {
+        var evaluation = Evaluation.of(command, jurisdiction);
+        var now = clock.instant();
+        var eventId = idGenerator.nextEventId();
+        var outcome = repository.findOwn(actor.tenantId(), command.customerNumber())
+                .map(snapshot -> CustomerRiskProfile.reconstitute(snapshot)
+                        .reevaluate(command, evaluation, actor.actorId(), now, eventId))
+                .orElseGet(() -> CustomerRiskProfile.create(idGenerator.nextProfileId(), actor.tenantId(),
+                        command, evaluation, actor.actorId(), now, eventId));
+        return repository.save(outcome.profile().toSnapshot(), outcome.fact(), outcome.events())
+                .mapError(_ -> new EvaluateCustomerRiskError.RiskProfileChangedConcurrently());
     }
 }

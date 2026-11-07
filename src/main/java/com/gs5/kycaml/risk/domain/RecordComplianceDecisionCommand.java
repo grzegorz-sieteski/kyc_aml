@@ -20,14 +20,24 @@ public record RecordComplianceDecisionCommand(
         Result<Justification, JustificationError> justification,
         RiskProfileVersion versionViewed) {
 
+    private static final long NO_VERSION_VIEWED = 0L;
+
     /**
      * Judges, in order: the kind of decision, then the customer number (a number that cannot be one
      * names no customer). The justification is parsed here but kept as a result.
      */
-    @SuppressWarnings("NullAway")
     public static Result<RecordComplianceDecisionCommand, RecordComplianceDecisionError> parse(
             RawRecordComplianceDecision raw) {
-        return null;
+        var viewed = raw.versionViewed();
+        var version = new RiskProfileVersion(viewed == null ? NO_VERSION_VIEWED : viewed);
+        return Result.<DecisionKind, RecordComplianceDecisionError>fromOptional(
+                        DecisionKind.parse(raw.kind()),
+                        RecordComplianceDecisionError.DecisionKindNotRecognised::new)
+                .flatMap(kind -> CustomerNumber.parse(raw.customerNumber())
+                        .<RecordComplianceDecisionError>mapError(
+                                _ -> new RecordComplianceDecisionError.CustomerNotFound())
+                        .map(number -> new RecordComplianceDecisionCommand(
+                                number, kind, Justification.parse(raw.justification()), version)));
     }
 
     /** Confidential input (BR-43): never printed. */

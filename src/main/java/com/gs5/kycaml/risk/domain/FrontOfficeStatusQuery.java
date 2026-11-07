@@ -6,8 +6,9 @@ import com.gs5.kycaml.shared.kernel.Result;
 public record FrontOfficeStatusQuery(CustomerNumber customerNumber) {
 
     /** A text that cannot be a customer number names no customer (BR-04, BR-06). */
-    @SuppressWarnings("NullAway")
     public static Result<FrontOfficeStatusQuery, FrontOfficeStatusError> parse(String rawCustomerNumber) {
-        return null;
+        return CustomerNumber.parse(rawCustomerNumber)
+                .map(FrontOfficeStatusQuery::new)
+                .mapError(_ -> new FrontOfficeStatusError.CustomerNotFound());
     }
 }

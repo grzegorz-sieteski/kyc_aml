@@ -6,8 +6,9 @@ import com.gs5.kycaml.shared.kernel.Result;
 public record ComplianceRiskViewQuery(CustomerNumber customerNumber) {
 
     /** A text that cannot be a customer number names no customer (BR-04, BR-06). */
-    @SuppressWarnings("NullAway")
     public static Result<ComplianceRiskViewQuery, ComplianceRiskViewError> parse(String rawCustomerNumber) {
-        return null;
+        return CustomerNumber.parse(rawCustomerNumber)
+                .map(ComplianceRiskViewQuery::new)
+                .mapError(_ -> new ComplianceRiskViewError.CustomerNotFound());
     }
 }

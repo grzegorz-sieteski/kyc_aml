@@ -2,6 +2,7 @@ package com.gs5.kycaml.risk.domain;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.Optional;
 
 /** What adverse-media screening found, and its points (BR-11, BR-16, A-13). */
@@ -22,8 +23,7 @@ public enum AdverseMediaClass {
     }
 
     /** Empty unless the text is exactly the name of a class. */
-    @SuppressWarnings("NullAway")
     public static Optional<AdverseMediaClass> parse(@Nullable String text) {
-        return null;
+        return Arrays.stream(values()).filter(constant -> constant.name().equals(text)).findFirst();
     }
 }

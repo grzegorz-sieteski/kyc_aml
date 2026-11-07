@@ -1,5 +1,6 @@
 package com.gs5.kycaml.risk.domain;
 
+import com.gs5.kycaml.shared.kernel.ControlCharacters;
 import com.gs5.kycaml.shared.kernel.Result;
 import org.jspecify.annotations.Nullable;
 
@@ -18,10 +19,22 @@ public final class CustomerNumber {
         this.value = value;
     }
 
-    /** Presence, then length, then content (BR-06). */
-    @SuppressWarnings("NullAway")
+    /**
+     * Presence, then length, then content (BR-06). {@code isEmpty()}, never {@code isBlank()}: a
+     * number of spaces is present and valid, because trimming is not a decision anybody took.
+     */
     public static Result<CustomerNumber, CustomerNumberError> parse(@Nullable String text) {
-        return null;
+        if (text == null || text.isEmpty()) {
+            return Result.failure(new CustomerNumberError.Missing());
+        }
+        var length = text.codePointCount(0, text.length());
+        if (length > MAX_LENGTH) {
+            return Result.failure(new CustomerNumberError.TooLong(MAX_LENGTH, length));
+        }
+        return ControlCharacters.firstIn(text)
+                .<Result<CustomerNumber, CustomerNumberError>>map(found -> Result.failure(
+                        new CustomerNumberError.ControlCharacter(found.codePoint(), found.index())))
+                .orElseGet(() -> Result.success(new CustomerNumber(text)));
     }
 
     /** The number exactly as supplied. */

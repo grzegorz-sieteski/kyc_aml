@@ -8,8 +8,12 @@ public enum AccountRestriction {
     ASSETS_FROZEN;
 
     /** Green is active, Yellow soft limits, Orange an enhanced-due-diligence hold, Red frozen. */
-    @SuppressWarnings("NullAway")
     public static AccountRestriction of(RiskTrack track) {
-        return null;
+        return switch (track) {
+            case GREEN -> ACTIVE;
+            case YELLOW -> SOFT_LIMITS;
+            case ORANGE -> EDD_HOLD;
+            case RED -> ASSETS_FROZEN;
+        };
     }
 }

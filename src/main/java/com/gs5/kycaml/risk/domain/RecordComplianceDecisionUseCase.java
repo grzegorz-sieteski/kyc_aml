@@ -26,9 +26,35 @@ public final class RecordComplianceDecisionUseCase {
      * the decision changes something, and no concurrent change is recorded. Success returns the new
      * version.
      */
-    @SuppressWarnings("NullAway")
     public Result<RiskProfileVersion, RecordComplianceDecisionError> execute(
             ActorContext actor, RecordComplianceDecisionCommand command) {
-        return null;
+        return repository.findOwn(actor.tenantId(), command.customerNumber())
+                .map(snapshot -> decideOn(snapshot, actor, command))
+                .orElseGet(() -> Result.failure(new RecordComplianceDecisionError.CustomerNotFound()));
+    }
+
+    private Result<RiskProfileVersion, RecordComplianceDecisionError> decideOn(
+            RiskProfileSnapshot snapshot, ActorContext actor, RecordComplianceDecisionCommand command) {
+        return command.justification()
+                .<RecordComplianceDecisionError>mapError(RecordComplianceDecisionUseCase::refusalOf)
+                .flatMap(justification -> CustomerRiskProfile.reconstitute(snapshot).decide(
+                        command.kind(), justification, command.versionViewed(), actor.actorId(),
+                        clock.instant(), idGenerator.nextEventId()))
+                .flatMap(outcome -> repository
+                        .save(outcome.profile().toSnapshot(), outcome.fact(), outcome.events())
+                        .<RecordComplianceDecisionError>mapError(
+                                _ -> new RecordComplianceDecisionError.RiskProfileChangedConcurrently()));
+    }
+
+    private static RecordComplianceDecisionError refusalOf(JustificationError error) {
+        return switch (error) {
+            case JustificationError.Missing _ -> new RecordComplianceDecisionError.JustificationMissing();
+            case JustificationError.TooShort(var min, var actual) ->
+                    new RecordComplianceDecisionError.JustificationTooShort(min, actual);
+            case JustificationError.TooLong(var max, var actual) ->
+                    new RecordComplianceDecisionError.JustificationTooLong(max, actual);
+            case JustificationError.ControlCharacter(var codePoint, var index) ->
+                    new RecordComplianceDecisionError.JustificationControlCharacter(codePoint, index);
+        };
     }
 }

@@ -27,12 +27,24 @@ public record JurisdictionPolicy(
         BigDecimal redThreshold,
         boolean strictForNonResidents) {
 
+    private static final BigDecimal GEOGRAPHIC_WEIGHT = new BigDecimal("0.30");
+    private static final BigDecimal PROFILE_WEIGHT = new BigDecimal("0.25");
+    private static final BigDecimal MEDIA_WEIGHT = new BigDecimal("0.25");
+    private static final BigDecimal PRODUCTS_WEIGHT = new BigDecimal("0.20");
+    private static final BigDecimal ONBOARDING_STATIC_WEIGHT = new BigDecimal("1.00");
+    private static final BigDecimal ONBOARDING_BEHAVIOURAL_WEIGHT = new BigDecimal("0.00");
+    private static final BigDecimal NON_RESIDENT_MULTIPLIER = new BigDecimal("1.25");
+    private static final BigDecimal YELLOW_THRESHOLD = new BigDecimal("31.00");
+    private static final BigDecimal ORANGE_THRESHOLD = new BigDecimal("61.00");
+    private static final BigDecimal RED_THRESHOLD = new BigDecimal("85.00");
+
     /**
      * The policy of a jurisdiction. In this increment the three in-scope jurisdictions share the
      * same numbers (D-06, A-13, A-17, A-18).
      */
-    @SuppressWarnings("NullAway")
     public static JurisdictionPolicy of(Jurisdiction jurisdiction) {
-        return null;
+        return new JurisdictionPolicy(jurisdiction, GEOGRAPHIC_WEIGHT, PROFILE_WEIGHT, MEDIA_WEIGHT,
+                PRODUCTS_WEIGHT, ONBOARDING_STATIC_WEIGHT, ONBOARDING_BEHAVIOURAL_WEIGHT,
+                NON_RESIDENT_MULTIPLIER, YELLOW_THRESHOLD, ORANGE_THRESHOLD, RED_THRESHOLD, true);
     }
 }
