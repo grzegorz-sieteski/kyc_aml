@@ -23,7 +23,7 @@ it, say so.
 ## Layout
 
 ```
-underwriting-service/
+kyc_aml/
 ├── AGENTS.md                          this file
 ├── pom.xml                            Boot 4 modular starters, no preview features
 ├── config/checkstyle/checkstyle.xml   statement-level gate (throw, imports, catch-all)
@@ -40,10 +40,10 @@ underwriting-service/
 │   ├── skills/                        loaded on demand
 │   └── agents/                        eight roles, invoked with @name
 └── src/
-    ├── main/java/com/gs5/underwriting/
+    ├── main/java/com/gs5/kycaml/
     │   ├── shared/kernel/             Result, ActorContext, ActorRole — keep tiny
     │   └── <module>/                  domain/ · adapters/
-    └── test/java/com/gs5/underwriting/
+    └── test/java/com/gs5/kycaml/
         └── ArchitectureRulesTest.java structural gate
 ```
 
@@ -115,10 +115,14 @@ Be honest about this, because the distinction matters:
 
 ## Known state of this repository
 
-- The `submission` module exists: register a submission, and search submissions by filter. It was
-  built through the agent workflow, which is also how the workflow itself got tested.
-  `docs/workflow/submission-registration-state.md` records what each stage found, including four
-  defects in this repository's own rules that the separation of roles caught.
+- No business module exists yet. The repository holds the AI SDLC harness, the build with its
+  gates, and the shared kernel, cloned from `underwriting-service`. The first module, customer
+  risk scoring, is specified from the ARGON analysis (an AML/KYC/CTF specification and
+  architecture produced with Gemini and supplied by the product owner).
+  `docs/workflow/customer-risk-scoring-state.md` records what each stage found.
+- `ActorRole` still carries the three roles of the template project (`VIEWER`, `UNDERWRITER`,
+  `SENIOR_UNDERWRITER`). They are replaced by the roles the KYC specification confirms, in the
+  stages that follow. Until then nothing in this repository uses them for a business decision.
 - **NullAway runs on `src/main` at compile time** (Error Prone 2.52 + NullAway 0.14.3). It needs the
   `--add-exports` flags in `.mvn/jvm.config`, which `./mvnw` picks up automatically. If you build
   with another Maven (IntelliJ's bundled one included), point it at that file or the compile fails

@@ -67,7 +67,7 @@ work around a gate.
 ## 2. Package layout
 
 ```
-com.gs5.underwriting
+com.gs5.kycaml
 ├── shared/kernel/              Result, ActorContext, ActorRole — keep this tiny
 └── <module>/                   one business capability, e.g. submission/
     ├── domain/                 WRITE side. Pure Java. Aggregate is package-private.
@@ -76,7 +76,7 @@ com.gs5.underwriting
     └── adapters/               web/ persistence/ messaging/ config/
 ```
 
-`domain/` and `query/` may depend only on `java.*`, `com.gs5.underwriting.shared.kernel.*`
+`domain/` and `query/` may depend only on `java.*`, `com.gs5.kycaml.shared.kernel.*`
 and `org.jspecify.*`.
 
 ## 3. Commands and queries

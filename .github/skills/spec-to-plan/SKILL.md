@@ -17,7 +17,7 @@ Read, in this order — do not design against assumptions:
    for business rules. If it does not exist, say so and ask whether to proceed from the raw
    requirement.
 3. `src/main/resources/db/migration/*.sql` — the schema that actually exists
-4. An existing module under `src/main/java/com/gs5/underwriting/`, if any, to match conventions
+4. An existing module under `src/main/java/com/gs5/kycaml/`, if any, to match conventions
 
 If a business rule, a limit, or a permission is missing, **ask one precise question and stop**.
 Do not invent a threshold, a currency, a role or a state machine. A number you made up will be

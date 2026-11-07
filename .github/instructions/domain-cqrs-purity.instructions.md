@@ -10,7 +10,7 @@ that way — that is what makes these rules testable in milliseconds instead of 
 
 ## Allowed dependencies
 
-`java.*` · `com.gs5.underwriting.shared.kernel.*` · `org.jspecify.annotations.*`
+`java.*` · `com.gs5.kycaml.shared.kernel.*` · `org.jspecify.annotations.*`
 
 Nothing else. No `org.springframework`, no `tools.jackson`, no `com.fasterxml.jackson`, no
 `org.apache.kafka`, no persistence annotations. `@Table`, `@Id`, `@Column` and `@Version` belong

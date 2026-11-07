@@ -15,7 +15,7 @@ Read `src/main/resources/db/migration/*.sql` before writing any SQL.
 ## Layout
 
 ```
-com.gs5.underwriting.<module>/
+com.gs5.kycaml.<module>/
 ├── domain/                                   WRITE SIDE — pure Java 25
 │   ├── package-info.java                     @NullMarked
 │   ├── <Operation>UseCase.java               public — ONE operation, one public execute(...)
