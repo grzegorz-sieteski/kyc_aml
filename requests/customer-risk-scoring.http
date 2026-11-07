@@ -1,0 +1,45 @@
+### Customer risk scoring - exploratory requests (IntelliJ / VS Code REST Client)
+### There is no identity source yet: until one is configured every call answers 401 (BR-01, fail-closed).
+### The end-to-end tests inject the caller; this file shows the shapes and the expected refusals.
+
+@host = http://localhost:8080
+
+### 1. Evaluate (ONBOARDING_SYSTEM) -> 200 {customerNumber, version}; 401 while nobody is identified
+POST {{host}}/api/risk-profiles/C-1001/evaluations
+Content-Type: application/json
+
+{
+  "profileClass": "POLITICALLY_EXPOSED",
+  "residence": {"country": "DE", "riskClass": "LOW"},
+  "citizenships": [{"country": "DE", "riskClass": "LOW"}],
+  "birth": {"country": "DE", "riskClass": "LOW"},
+  "loginCountry": "AE",
+  "channel": "REMOTE",
+  "highRiskProductRequest": true,
+  "adverseMediaClass": "UNCONFIRMED_FINANCIAL_CRIME",
+  "sanctionsMatch": false,
+  "terroristLink": false,
+  "forgedIdentity": false
+}
+
+### 2. Compliance view (L1, L2, MLRO) -> 200 with score, tracks, explanation, version
+GET {{host}}/api/risk-profiles/C-1001
+
+### 3. Front-office status (any identified caller) -> 200 {customerNumber, status, message}; no risk data
+GET {{host}}/api/risk-profiles/C-1001/front-office-status
+
+### 4. Freeze (L2, MLRO) -> 200 {customerNumber, version}; 409 when versionViewed is stale
+POST {{host}}/api/risk-profiles/C-1001/decisions
+Content-Type: application/json
+
+{
+  "kind": "FREEZE_ASSETS",
+  "justification": "Analyst reviewed the alert and the documents",
+  "versionViewed": 1
+}
+
+### 5. Unknown decision kind -> 400 (403 first for a role that may not decide at all)
+POST {{host}}/api/risk-profiles/C-1001/decisions
+Content-Type: application/json
+
+{"kind": "NOT_A_KIND", "justification": "Analyst reviewed the alert and the documents", "versionViewed": 1}

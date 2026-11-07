@@ -54,7 +54,7 @@ Two inconsistencies inside the harness itself, found while preparing this stage:
 
 ## Open defects
 
-None.
+None. Known gaps: no identity source (every call is 401 until one is chosen), no dead-letter handling for an outbox row that keeps failing (attempts make it visible), no real booking-centre configuration, no React yet.
 
 ## Next
 
@@ -64,3 +64,12 @@ Open a new chat and call the architect:
 > `docs/specs/customer-risk-scoring-spec.md`, following the `spec-to-plan` skill. Resolve H-01 to
 > H-08 in `docs/workflow/customer-risk-scoring-state.md` explicitly, and cover both commands and both
 > queries.
+
+## Status (2026-11-07)
+
+Stages 1-4 are done for the whole scoring core: domain, access gate, persistence, projection and
+relay, web edge and wiring. `./mvnw verify` is green on a real PostgreSQL 17 (296 unit tests, 36
+integration tests). The web edge was written together with its tests rather than RED first; the tests
+were proved by mutating a status mapping and a permission (both made them fail). Stage 5 has only the
+request file `requests/customer-risk-scoring.http`; the independent code and security reviews of
+stage 6 have not been run.
