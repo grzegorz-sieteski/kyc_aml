@@ -7,11 +7,7 @@ Stage 1 artefact. Source of business facts: the ARGON analysis supplied by the p
 Gemini conversation "Specyfikacja systemu AML/KYC i CTF", published 2026-11-07), and the product
 owner's answers of 2026-11-07 recorded below.
 
-**This specification is not yet releasable to stage 2.** The product owner decided that the numbers
-in ARGON are not confirmed. Every such number carries an assumption marker, and so does every gap
-the analyst had to fill because ARGON is silent or contradicts itself. The full list is in section 7,
-and it is the only place a marker appears. The orchestrator blocks the design while any marker
-remains.
+**Releasable to stage 2.** Every former assumption (section 7) was confirmed by the product owner on 2026-11-07 (D-07).
 
 ## Confirmed decisions (product owner)
 
@@ -22,6 +18,8 @@ remains.
 | D-03 | 2026-11-07 | The user interface is not part of this increment. |
 | D-04 | 2026-11-07 | The numbers in ARGON (weights, points, thresholds, multipliers, the 0–100 scale, lengths) are not confirmed. They appear in this document as assumptions. |
 | D-05 | 2026-11-05 | Stated by the product owner as a general rule: the technical identity of a record is never exposed outside the service. A record is named by its business identifier. |
+| D-06 | 2026-11-07 | The booking centres in scope are in the United States (US), the United Kingdom (GB) and Germany (DE, under EU rules). No other jurisdiction is evaluated in this increment. |
+| D-07 | 2026-11-07 | Assumptions A-01 to A-31 are confirmed as written, with A-16 and A-18 applying to the three booking centres of D-06. |
 
 ## Scope
 
@@ -233,17 +231,17 @@ version 1 for a new profile or one version higher, carrying the inputs, the juri
 explanation, the total score, the evaluated track, the effective track and the restriction. The fact
 `CustomerRiskEvaluated` is announced (section 5).
 
-**Worked examples.** The booking centre is in Poland (PL) and its policy requires the stricter
+**Worked examples.** The booking centre is in Germany (DE) and its policy requires the stricter
 approach for non-residents (A-18). No critical fact is in force unless stated.
 
 | # | Inputs | Calculation | Outcome |
 |---|---|---|---|
-| E1 | Individual in employment; residence, citizenship and birth PL, all low; login PL; branch; no product request; nothing in adverse media | Geographic 0, profile 10, media 0, products 10. R_KYC = 0 + 2.50 + 0 + 2.00 = 4.50. Resident: ×1.00 | S_total 4.50, Green, active |
-| E2 | As E1, but residence and login country Germany (DE), low | Geographic 0 (login matches residence). R_KYC 4.50. Non-resident: 4.50 × 1.25 = 5.625 | S_total 5.63 (half-up), Green, active |
-| E3 | Politically exposed person; residence PL low; citizenship AE low; birth PL low; login AE; remote; product request yes; unconfirmed financial-crime reports | Geographic min(MAX, 0 + 30) = 30, profile 70, media 50, products max(40, 60) = 60. R_KYC = 9.00 + 17.50 + 12.50 + 12.00 = 51.00. Resident | S_total 51.00, Yellow, soft limits |
-| E4 | As E3, but residence DE, low | 51.00 × 1.25 = 63.75 | S_total 63.75, Orange, enhanced-due-diligence hold |
-| E5 | Non-profit organisation operating across borders; all countries PL low; login PL; branch; no product request; nothing in adverse media | Geographic 0, profile 85, media 0, products 10. R_KYC = 21.25 + 2.00 = 23.25 | S_total 23.25, but Orange by BR-25, enhanced-due-diligence hold |
-| E6 | Student; residence on the FATF black list; login elsewhere; remote; product request yes; radicalisation reported; booking centre PL | Geographic min(MAX, 100 + 30) = 100, profile 30, media 95, products 60. R_KYC = 30.00 + 7.50 + 23.75 + 12.00 = 73.25. Non-resident: 91.5625 | S_total 91.56, Red, assets frozen |
+| E1 | Individual in employment; residence, citizenship and birth DE, all low; login DE; branch; no product request; nothing in adverse media | Geographic 0, profile 10, media 0, products 10. R_KYC = 0 + 2.50 + 0 + 2.00 = 4.50. Resident: ×1.00 | S_total 4.50, Green, active |
+| E2 | As E1, but residence and login country France (FR), low | Geographic 0 (login matches residence). R_KYC 4.50. Non-resident: 4.50 × 1.25 = 5.625 | S_total 5.63 (half-up), Green, active |
+| E3 | Politically exposed person; residence DE low; citizenship AE low; birth DE low; login AE; remote; product request yes; unconfirmed financial-crime reports | Geographic min(MAX, 0 + 30) = 30, profile 70, media 50, products max(40, 60) = 60. R_KYC = 9.00 + 17.50 + 12.50 + 12.00 = 51.00. Resident | S_total 51.00, Yellow, soft limits |
+| E4 | As E3, but residence FR, low | 51.00 × 1.25 = 63.75 | S_total 63.75, Orange, enhanced-due-diligence hold |
+| E5 | Non-profit organisation operating across borders; all countries DE low; login DE; branch; no product request; nothing in adverse media | Geographic 0, profile 85, media 0, products 10. R_KYC = 21.25 + 2.00 = 23.25 | S_total 23.25, but Orange by BR-25, enhanced-due-diligence hold |
+| E6 | Student; residence on the FATF black list; login elsewhere; remote; product request yes; radicalisation reported; booking centre DE | Geographic min(MAX, 100 + 30) = 100, profile 30, media 95, products 60. R_KYC = 30.00 + 7.50 + 23.75 + 12.00 = 73.25. Non-resident: 91.5625 | S_total 91.56, Red, assets frozen |
 | E7 | As E1, with a confirmed sanctions-list match | Critical fact | S_total MAX, Red, assets frozen; the explanation names the match |
 
 ### Command 2 — Record Compliance Decision
@@ -362,102 +360,102 @@ Neither is announced for a refused operation (BR-42).
 | Customer profile class, adverse media class, countries | Personal data; politically exposed status and adverse media are sensitive | **Never** (BR-43) |
 | Caller identity | Attributable to an individual | **Never** (A-29) |
 
-## 7. Assumptions awaiting product owner confirmation
+## 7. Former assumptions, confirmed by the product owner
 
-Each marker below blocks stage 2 until it is confirmed, changed or removed.
+Each was an open assumption until 2026-11-07, when the product owner confirmed it (D-07). The source of each is kept for audit.
 
 **A-01.**
-> `ASSUMPTION — NOT CONFIRMED: the score scale is 0 to MAX with MAX = 100, and every score carries two decimal places. Source: ARGON (0–100 scale, two decimals). Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the score scale is 0 to MAX with MAX = 100, and every score carries two decimal places. Source: ARGON (0–100 scale, two decimals).`
 
 **A-02.**
-> `ASSUMPTION — NOT CONFIRMED: the roles are Onboarding System, AML Analyst L1, AML Analyst L2, MLRO and Front-Office Employee. Evaluate: Onboarding System. Escalate to enhanced due diligence: L1, L2, MLRO. Freeze assets: L2, MLRO. Clear as false positive: L2, MLRO. Compliance view: L1, L2, MLRO. Front-office status: every role. Source: analyst reading of ARGON (L1 handles alerts, L2 verifies enhanced due diligence, MLRO receives critical cases); ARGON names no permission table. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the roles are Onboarding System, AML Analyst L1, AML Analyst L2, MLRO and Front-Office Employee. Evaluate: Onboarding System. Escalate to enhanced due diligence: L1, L2, MLRO. Freeze assets: L2, MLRO. Clear as false positive: L2, MLRO. Compliance view: L1, L2, MLRO. Front-office status: every role. Source: analyst reading of ARGON (L1 handles alerts, L2 verifies enhanced due diligence, MLRO receives critical cases); ARGON names no permission table.`
 
 **A-03.**
-> `ASSUMPTION — NOT CONFIRMED: the role is decided before any input is examined. Source: analyst default, taken from the confirmed rule of the template project; ARGON is silent. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the role is decided before any input is examined. Source: analyst default, taken from the confirmed rule of the template project; ARGON is silent.`
 
 **A-04.**
-> `ASSUMPTION — NOT CONFIRMED: compliance and front-office staff reach only the customers of their own booking centre, and another booking centre's customer is indistinguishable from an unknown one. Source: analyst reading of ARGON's booking-centre overlays and data-residency requirement; ARGON does not state who may see which customer. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): compliance and front-office staff reach only the customers of their own booking centre, and another booking centre's customer is indistinguishable from an unknown one. Source: analyst reading of ARGON's booking-centre overlays and data-residency requirement; ARGON does not state who may see which customer.`
 
 **A-05.**
-> `ASSUMPTION — NOT CONFIRMED: a customer number is unique within a booking centre, not across the bank. Source: analyst default; ARGON makes the core-banking identifier unique without saying in what scope. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): a customer number is unique within a booking centre, not across the bank. Source: analyst default; ARGON makes the core-banking identifier unique without saying in what scope.`
 
 **A-06.**
-> `ASSUMPTION — NOT CONFIRMED: a customer number is at most 64 characters, contains no control character, and is compared exactly as supplied. Source: ARGON (64-character identifier); the control-character and exact-comparison rules are analyst defaults. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): a customer number is at most 64 characters, contains no control character, and is compared exactly as supplied. Source: ARGON (64-character identifier); the control-character and exact-comparison rules are analyst defaults.`
 
 **A-07.**
-> `ASSUMPTION — NOT CONFIRMED: the five profile classes cover every customer this increment evaluates. A domestic company, a domestic non-profit organisation or a self-employed individual fits none of them and is refused. Source: ARGON lists these five classes only. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the five profile classes cover every customer this increment evaluates. A domestic company, a domestic non-profit organisation or a self-employed individual fits none of them and is refused. Source: ARGON lists these five classes only.`
 
 **A-08.**
-> `ASSUMPTION — NOT CONFIRMED: the login country is required, and countries are ISO 3166-1 alpha-2 codes. Source: ARGON (alpha-2 codes; login location checked at onboarding); that the login country is required is an analyst default. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the login country is required, and countries are ISO 3166-1 alpha-2 codes. Source: ARGON (alpha-2 codes; login location checked at onboarding); that the login country is required is an analyst default.`
 
 **A-09.**
-> `ASSUMPTION — NOT CONFIRMED: the geographic risk class of each country is supplied with the evaluation, from the bank's country risk register; this service holds no country lists in this increment. Source: analyst default; ARGON does not say where the classification comes from. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the geographic risk class of each country is supplied with the evaluation, from the bank's country risk register; this service holds no country lists in this increment. Source: analyst default; ARGON does not say where the classification comes from.`
 
 **A-10.**
-> `ASSUMPTION — NOT CONFIRMED: the adverse media class is supplied with the evaluation as the outcome of screening done elsewhere. Source: analyst default; screening is out of scope for this increment (D-01). Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the adverse media class is supplied with the evaluation as the outcome of screening done elsewhere. Source: analyst default; screening is out of scope for this increment (D-01).`
 
 **A-11.**
-> `ASSUMPTION — NOT CONFIRMED: the three critical facts are supplied with the evaluation as yes or no, decided elsewhere (screening, law-enforcement checks, document and device checks). Source: analyst default; those checks are out of scope for this increment (D-01). Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the three critical facts are supplied with the evaluation as yes or no, decided elsewhere (screening, law-enforcement checks, document and device checks). Source: analyst default; those checks are out of scope for this increment (D-01).`
 
 **A-12.**
-> `ASSUMPTION — NOT CONFIRMED: every evaluation carries the complete set of inputs, and a re-evaluation replaces all earlier inputs. Source: analyst default; ARGON does not say whether a re-evaluation may change one fact alone. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): every evaluation carries the complete set of inputs, and a re-evaluation replaces all earlier inputs. Source: analyst default; ARGON does not say whether a re-evaluation may change one fact alone.`
 
 **A-13.**
-> `ASSUMPTION — NOT CONFIRMED: every number in BR-14 to BR-24: geographic points 0, 50 and 100 and the login mismatch 30; profile points 10, 30, 70, 80 and 85; adverse media points 0, 50 and 95; products and channels points 10, 40 and 60; category weights 30%, 25%, 25% and 20%; component weights 1.00 and 0.00 at onboarding, 0.35 and 0.65 with transactional activity; multipliers 1.00 and 1.25; track thresholds 31.00, 61.00 and 85.00. Source: ARGON; the product owner has not confirmed them (D-04). Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): every number in BR-14 to BR-24: geographic points 0, 50 and 100 and the login mismatch 30; profile points 10, 30, 70, 80 and 85; adverse media points 0, 50 and 95; products and channels points 10, 40 and 60; category weights 30%, 25%, 25% and 20%; component weights 1.00 and 0.00 at onboarding, 0.35 and 0.65 with transactional activity; multipliers 1.00 and 1.25; track thresholds 31.00, 61.00 and 85.00. Source: ARGON; the product owner has not confirmed them (D-04).`
 
 **A-14.**
-> `ASSUMPTION — NOT CONFIRMED: the geographic category takes the highest class among the residence, citizenship and birth countries, adds the login mismatch, and is capped at MAX. Source: analyst reading of ARGON, which lists the points without saying how several countries combine. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the geographic category takes the highest class among the residence, citizenship and birth countries, adds the login mismatch, and is capped at MAX. Source: analyst reading of ARGON, which lists the points without saying how several countries combine.`
 
 **A-15.**
-> `ASSUMPTION — NOT CONFIRMED: the products and channels category takes the highest of the channel points and the product request points, rather than adding them. Source: analyst reading of ARGON, which lists the points without saying how they combine. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the products and channels category takes the highest of the channel points and the product request points, rather than adding them. Source: analyst reading of ARGON, which lists the points without saying how they combine.`
 
 **A-16.**
-> `ASSUMPTION — NOT CONFIRMED: the jurisdiction policy is the policy of the caller's booking centre. Source: analyst choice; ARGON says overlays are activated by residence, citizenship and booking centre, and its examples select the policy by residence country, so ARGON is not consistent. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the jurisdiction policy is the policy of the caller's booking centre. Source: analyst choice; ARGON says overlays are activated by residence, citizenship and booking centre, and its examples select the policy by residence country, so ARGON is not consistent.`
 
 **A-17.**
-> `ASSUMPTION — NOT CONFIRMED: in this increment every evaluation uses the onboarding weights, because no behavioural score exists yet. Source: analyst reading of ARGON (onboarding weights 1.0 and 0.0) and of D-01. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): in this increment every evaluation uses the onboarding weights, because no behavioural score exists yet. Source: analyst reading of ARGON (onboarding weights 1.0 and 0.0) and of D-01.`
 
 **A-18.**
-> `ASSUMPTION — NOT CONFIRMED: the policy of every booking centre in this increment requires the stricter approach for non-residents, so every non-resident gets the 1.25 multiplier; a customer is a non-resident when the residence country differs from the booking centre's country. Source: analyst default; ARGON gives 1.25 as an example and does not name the jurisdictions that require it. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the policy of every booking centre in this increment requires the stricter approach for non-residents, so every non-resident gets the 1.25 multiplier; a customer is a non-resident when the residence country differs from the booking centre's country. Source: analyst default; ARGON gives 1.25 as an example and does not name the jurisdictions that require it.`
 
 **A-19.**
-> `ASSUMPTION — NOT CONFIRMED: the total is rounded half-up to two decimal places, once, at the end. Source: ARGON's first calculation rounds half-up to two places; its later examples round differently. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the total is rounded half-up to two decimal places, once, at the end. Source: ARGON's first calculation rounds half-up to two places; its later examples round differently.`
 
 **A-20.**
-> `ASSUMPTION — NOT CONFIRMED: a threshold belongs to the higher track (31.00 is Yellow, 61.00 is Orange, 85.00 is Red). Source: ARGON's policy thresholds compared with "at least"; ARGON's track table (0–30, 31–60, 61–84, 85–100) does not say where a score such as 30.50 falls. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): a threshold belongs to the higher track (31.00 is Yellow, 61.00 is Orange, 85.00 is Red). Source: ARGON's policy thresholds compared with "at least"; ARGON's track table (0–30, 31–60, 61–84, 85–100) does not say where a score such as 30.50 falls.`
 
 **A-21.**
-> `ASSUMPTION — NOT CONFIRMED: the automatic escalation of non-profit organisations means the evaluated track is at least Orange. Source: analyst reading of ARGON ("non-profit organisations are escalated to enhanced due diligence automatically") without a stated mechanism. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the automatic escalation of non-profit organisations means the evaluated track is at least Orange. Source: analyst reading of ARGON ("non-profit organisations are escalated to enhanced due diligence automatically") without a stated mechanism.`
 
 **A-22.**
-> `ASSUMPTION — NOT CONFIRMED: Green means active, Yellow soft limits, Orange enhanced-due-diligence hold, Red assets frozen. Source: ARGON's final model; an earlier ARGON model maps every track except Red to active, so ARGON contradicts itself. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): Green means active, Yellow soft limits, Orange enhanced-due-diligence hold, Red assets frozen. Source: ARGON's final model; an earlier ARGON model maps every track except Red to active, so ARGON contradicts itself.`
 
 **A-23.**
-> `ASSUMPTION — NOT CONFIRMED: an evaluation never lowers a track set by a compliance decision; only a later decision clears it. Source: analyst default for safety. ARGON is silent, and without this rule an automated re-evaluation could lift an asset freeze that compliance staff imposed. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): an evaluation never lowers a track set by a compliance decision; only a later decision clears it. Source: analyst default for safety. ARGON is silent, and without this rule an automated re-evaluation could lift an asset freeze that compliance staff imposed.`
 
 **A-24.**
-> `ASSUMPTION — NOT CONFIRMED: freeze assets sets Red, escalate sets Orange, and clear as false positive returns the customer to the track of the latest evaluation. Source: analyst reading of ARGON's three decisions; ARGON does not say which track clearing leads to. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): freeze assets sets Red, escalate sets Orange, and clear as false positive returns the customer to the track of the latest evaluation. Source: analyst reading of ARGON's three decisions; ARGON does not say which track clearing leads to.`
 
 **A-25.**
-> `ASSUMPTION — NOT CONFIRMED: a justification is at least 20 and at most 2 000 characters, and may contain line breaks but no other control character. Source: ARGON (at least 20 characters); the upper limit and the line-break rule are analyst defaults, because ARGON sets no upper limit. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): a justification is at least 20 and at most 2 000 characters, and may contain line breaks but no other control character. Source: ARGON (at least 20 characters); the upper limit and the line-break rule are analyst defaults, because ARGON sets no upper limit.`
 
 **A-26.**
-> `ASSUMPTION — NOT CONFIRMED: a decision that changes nothing is refused, judged on the decided track: freeze is refused when a decided Red exists, escalation when a decided Orange or Red exists, clearing when no decided track exists; freezing a customer who is Red by evaluation alone is allowed. Source: analyst default; ARGON is silent. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): a decision that changes nothing is refused, judged on the decided track: freeze is refused when a decided Red exists, escalation when a decided Orange or Red exists, clearing when no decided track exists; freezing a customer who is Red by evaluation alone is allowed. Source: analyst default; ARGON is silent.`
 
 **A-27.**
-> `ASSUMPTION — NOT CONFIRMED: the order of refusals in both command catalogues, including that an unrecognised kind of decision is refused before the role is judged. Source: analyst default, following the template project's confirmed ordering principle; ARGON is silent. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the order of refusals in both command catalogues, including that an unrecognised kind of decision is refused before the role is judged. Source: analyst default, following the template project's confirmed ordering principle; ARGON is silent.`
 
 **A-28.**
-> `ASSUMPTION — NOT CONFIRMED: the two front-office statuses and their messages. Source: ARGON gives the messages in Polish ("Konto aktywne – brak ograniczeń operacyjnych." and "Trwa standardowa weryfikacja administracyjna dokumentacji."); the English wording and the two status names are analyst translations. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the two front-office statuses and their messages. Source: ARGON gives the messages in Polish ("Konto aktywne – brak ograniczeń operacyjnych." and "Trwa standardowa weryfikacja administracyjna dokumentacji."); the English wording and the two status names are analyst translations.`
 
 **A-29.**
-> `ASSUMPTION — NOT CONFIRMED: the customer number may be logged, but never with risk information; the caller's identity is never logged. Source: analyst default, from the tipping-off ban in ARGON and the template project's confirmed rule on caller identity. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the customer number may be logged, but never with risk information; the caller's identity is never logged. Source: analyst default, from the tipping-off ban in ARGON and the template project's confirmed rule on caller identity.`
 
 **A-30.**
-> `ASSUMPTION — NOT CONFIRMED: the two events are delivered to compliance consumers only. Source: analyst reading of ARGON's tipping-off ban; ARGON does not name the consumers. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the two events are delivered to compliance consumers only. Source: analyst reading of ARGON's tipping-off ban; ARGON does not name the consumers.`
 
 **A-31.**
-> `ASSUMPTION — NOT CONFIRMED: the decision event does not carry the justification; the justification is recorded and shown in the compliance view only. Source: analyst default, to keep free text out of messages; ARGON's decision event carries it. Confirm before release.`
+> `CONFIRMED 2026-11-07 (D-07): the decision event does not carry the justification; the justification is recorded and shown in the compliance view only. Source: analyst default, to keep free text out of messages; ARGON's decision event carries it.`
 
 ## Hand-over checklist
 
@@ -465,4 +463,4 @@ Each marker below blocks stage 2 until it is confirmed, changed or removed.
 - [x] Every command lists all its refusal reasons, in order
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
-- [ ] Every `ASSUMPTION` marker resolved — **open: A-01 to A-31**. Stage 2 is blocked until this box is checked.
+- [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07)

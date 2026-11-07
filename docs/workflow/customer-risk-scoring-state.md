@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 1 · Status: **BLOCKED** — 31 assumptions await product owner confirmation
+Stage: 2 · Status: READY_FOR_NEXT
 Updated: 2026-11-07
 
 ## Source
@@ -21,8 +21,8 @@ interface yet; ARGON's numbers are not confirmed and appear as assumptions.
 | Stage | Agent | Artefact | Gate result | Verified at |
 |---|---|---|---|---|
 | 0 | bootstrap | build, shared kernel, gates | `./mvnw -B verify`: 0 Checkstyle violations, 75 tests, BUILD SUCCESS. Gates broken on purpose once: a `throw new` in the kernel failed Checkstyle (`noThrowNew`); a kernel `*Helper` depending on Spring failed `shared_kernel_stays_pure_java` and `no_grab_bag_classes`. Probes removed | commit `a5edac7` |
-| 1 | `@business-analyst` | `docs/specs/customer-risk-scoring-spec.md` | **Not passed**: 31 unresolved assumption markers, A-01 to A-31 (`grep -c 'ASSUMPTION — NOT CONFIRMED'` → 31) | 2026-11-07 |
-| 2 | `@architect` | `docs/adr/customer-risk-scoring-design.md` | not started: blocked by stage 1 | — |
+| 1 | `@business-analyst` | `docs/specs/customer-risk-scoring-spec.md` | **Passed**: A-01 to A-31 confirmed by the product owner (D-07); booking centres US, GB, DE (D-06); `grep -c 'NOT CONFIRMED'` → 0 | 2026-11-07 |
+| 2 | `@architect` | `docs/adr/customer-risk-scoring-design.md` | not started | — |
 | 3 | `@test-designer` | contracts and failing tests | not started | — |
 | 4 | `@developer` | production code | not started | — |
 | 5 | `@qa-explorer` | `requests/customer-risk-scoring.http` | not started | — |
@@ -58,11 +58,7 @@ None.
 
 ## Next
 
-**Product owner:** confirm, change or remove each of A-01 to A-31 in section 7 of
-`docs/specs/customer-risk-scoring-spec.md`. When none is left, the analyst records the answers as
-confirmed decisions and removes the markers, and this board moves to stage 2.
-
-Then open a new chat and call the architect:
+Open a new chat and call the architect:
 
 > `@architect` design mode. Write `docs/adr/customer-risk-scoring-design.md` from
 > `docs/specs/customer-risk-scoring-spec.md`, following the `spec-to-plan` skill. Resolve H-01 to
