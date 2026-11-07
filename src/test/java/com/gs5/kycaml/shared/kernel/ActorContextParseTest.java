@@ -31,7 +31,7 @@ class ActorContextParseTest {
     @DisplayName("a missing or non-canonical tenant yields no caller, never a guessed identity")
     void shouldReturnEmptyWhenTenantIsMissingOrNotCanonicalUuid(String tenant) {
         // When
-        var actor = ActorContext.parse(tenant, ACTOR, ActorRole.UNDERWRITER);
+        var actor = ActorContext.parse(tenant, ACTOR, ActorRole.AML_ANALYST_L2);
 
         // Then
         assertThat(actor).isEmpty();
@@ -42,7 +42,7 @@ class ActorContextParseTest {
     @ValueSource(strings = {"", "   "})
     @DisplayName("an absent or blank actor id yields no caller")
     void shouldReturnEmptyWhenActorIdIsMissingOrBlank(String actorId) {
-        var actor = ActorContext.parse(TENANT, actorId, ActorRole.UNDERWRITER);
+        var actor = ActorContext.parse(TENANT, actorId, ActorRole.AML_ANALYST_L2);
 
         assertThat(actor).isEmpty();
     }
@@ -58,7 +58,7 @@ class ActorContextParseTest {
     @Test
     @DisplayName("an actor id one code point over the column width is refused")
     void shouldReturnEmptyWhenActorIdExceedsMaximumLength() {
-        var actor = ActorContext.parse(TENANT, "a".repeat(256), ActorRole.UNDERWRITER);
+        var actor = ActorContext.parse(TENANT, "a".repeat(256), ActorRole.AML_ANALYST_L2);
 
         assertThat(actor).isEmpty();
     }
@@ -66,7 +66,7 @@ class ActorContextParseTest {
     @Test
     @DisplayName("an actor id of exactly the column width is accepted")
     void shouldAcceptActorIdWhenExactlyMaximumLength() {
-        var actor = ActorContext.parse(TENANT, "a".repeat(255), ActorRole.UNDERWRITER);
+        var actor = ActorContext.parse(TENANT, "a".repeat(255), ActorRole.AML_ANALYST_L2);
 
         assertThat(actor).isPresent();
     }
@@ -77,9 +77,9 @@ class ActorContextParseTest {
     void shouldCountActorIdLengthInCodePointsWhenSupplementaryCharacters() {
         var emoji = "😀";
 
-        assertThat(ActorContext.parse(TENANT, emoji.repeat(255), ActorRole.UNDERWRITER))
+        assertThat(ActorContext.parse(TENANT, emoji.repeat(255), ActorRole.AML_ANALYST_L2))
                 .isPresent();
-        assertThat(ActorContext.parse(TENANT, emoji.repeat(256), ActorRole.UNDERWRITER))
+        assertThat(ActorContext.parse(TENANT, emoji.repeat(256), ActorRole.AML_ANALYST_L2))
                 .isEmpty();
     }
 
@@ -88,7 +88,7 @@ class ActorContextParseTest {
     @DisplayName("an actor id containing a control character is refused, because it is written to "
             + "the audit field and to logs")
     void shouldReturnEmptyWhenActorIdContainsControlCharacter(String actorId) {
-        var actor = ActorContext.parse(TENANT, actorId, ActorRole.UNDERWRITER);
+        var actor = ActorContext.parse(TENANT, actorId, ActorRole.AML_ANALYST_L2);
 
         assertThat(actor).isEmpty();
     }
@@ -97,7 +97,7 @@ class ActorContextParseTest {
     @DisplayName("a well-formed claim set yields a caller with the values as supplied")
     void shouldYieldCallerWhenAllComponentsAreWellFormed() {
         // When
-        var parsed = ActorContext.parse(TENANT, ACTOR, ActorRole.UNDERWRITER);
+        var parsed = ActorContext.parse(TENANT, ACTOR, ActorRole.AML_ANALYST_L2);
 
         // Then
         assertThat(parsed).isPresent();
@@ -109,7 +109,7 @@ class ActorContextParseTest {
     @DisplayName("an actor id is not trimmed: leading and trailing spaces are kept (BR-07 applies "
             + "the same principle to identities)")
     void shouldKeepActorIdExactlyWhenSurroundedBySpaces() {
-        var parsed = ActorContext.parse(TENANT, " uw-01 ", ActorRole.UNDERWRITER);
+        var parsed = ActorContext.parse(TENANT, " uw-01 ", ActorRole.AML_ANALYST_L2);
 
         assertThat(parsed).isPresent();
         assertThat(parsed.orElseThrow().actorId()).isEqualTo(" uw-01 ");
@@ -118,7 +118,7 @@ class ActorContextParseTest {
     @Test
     @DisplayName("the parsed caller does not print the actor id")
     void shouldNotPrintActorIdWhenCallerIsPrinted() {
-        var parsed = ActorContext.parse(TENANT, ACTOR, ActorRole.UNDERWRITER);
+        var parsed = ActorContext.parse(TENANT, ACTOR, ActorRole.AML_ANALYST_L2);
 
         assertThat(parsed).isPresent();
         assertThat(parsed.orElseThrow().toString()).doesNotContain(ACTOR);

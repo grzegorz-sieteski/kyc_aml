@@ -10,9 +10,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ActorRoleTest {
 
     @Test
-    @DisplayName("the roles that may decide are exactly the two approving roles, confirmed by the product owner (BR-02, BR-33)")
-    void shouldPinTheDecidingRolesToExactlyUnderwriterAndSeniorUnderwriter() {
-        assertThat(Arrays.stream(ActorRole.values()).filter(ActorRole::canDecide))
-                .containsExactlyInAnyOrder(ActorRole.UNDERWRITER, ActorRole.SENIOR_UNDERWRITER);
+    @DisplayName("the roles are exactly the five of assumption A-02, confirmed by the product owner")
+    void shouldPinTheRolesToExactlyTheFiveOfAssumptionA02() {
+        assertThat(Arrays.stream(ActorRole.values()).map(Enum::name))
+                .containsExactlyInAnyOrder(
+                        "ONBOARDING_SYSTEM", "AML_ANALYST_L1", "AML_ANALYST_L2", "MLRO", "FRONT_OFFICE");
     }
 }
