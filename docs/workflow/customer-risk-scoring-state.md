@@ -73,3 +73,31 @@ integration tests). The web edge was written together with its tests rather than
 were proved by mutating a status mapping and a permission (both made them fail). Stage 5 has only the
 request file `requests/customer-risk-scoring.http`; the independent code and security reviews of
 stage 6 have not been run.
+
+## Open design question for the architect: relay connection pressure (2026-11-07)
+
+Raised by the code review, deliberately not fixed by the developer because it is an architecture choice.
+
+**Problem.** `OutboxRelay.runOnce` claims a batch with `FOR UPDATE SKIP LOCKED` inside one transaction
+and keeps that transaction (one connection, row locks) open while up to 16 virtual-thread workers each
+project in their own transaction, so each takes another connection. With the default Hikari pool of 10
+the workers queue for connections while the claim locks are held; under request load a worker can wait
+past the connection timeout, fail, and count an attempt for nothing.
+
+**Constraints.** Projection stays idempotent and version-gated; per-profile order within a batch;
+several relays may run at once without delivering a row twice; no event is lost on a crash; no broker;
+no `throw`, no catch-all; harness rules unchanged.
+
+**Candidate solutions to compare in the proof of concept.**
+1. Bound the workers to the pool (a semaphore or fewer partitions) and keep the long claim transaction.
+2. Claim and mark short: claim rows into a lease (`locked_until`, `locked_by`) in a short transaction,
+   project outside any claim transaction, then mark delivered in a second short transaction; expired
+   leases are reclaimed after a crash.
+3. Project inside the claim transaction on the same connection, partitioned by profile across
+   several claimers instead of threads.
+4. Move the projection into the write transaction (same database) and drop the relay for the view.
+
+**Expected output.** `docs/adr/` addendum with the measured comparison (connections held, throughput,
+behaviour on a crash between claim and mark, on a pool of 10 and of 3), a recommendation, and a spike
+under `src/test/` or a scratch module that shows it; no change to `src/main/` until the design is
+confirmed.
