@@ -1,0 +1,20 @@
+# Test files @developer may touch in the GREEN phase, for MECHANICAL signature changes only.
+#
+# Used by scripts/check-write-lock.sh green. Product owner decision, 2026-11-03: design revision 4
+# changes types that these files construct (ActorContext, RegisterSubmissionCommand,
+# SearchSubmissionsQuery, SubmissionSummaryView, SearchSubmissionsError, the two refusals that
+# moved to the access gate, ActorRole's package). Constructor calls, imports and type names may
+# change. Anything that decides WHAT a test checks may not: the gate fails if a changed line in
+# these files touches an assertion, a test annotation or a display name.
+#
+# Empty this file when the migration is committed. A permanent allowlist is a permanent hole.
+src/test/java/com/gs5/underwriting/submission/domain/RegisterSubmissionUseCaseTest.java
+src/test/java/com/gs5/underwriting/submission/domain/SearchSubmissionsUseCaseTest.java
+src/test/java/com/gs5/underwriting/submission/domain/SubmissionRegistrationAdversarialTest.java
+src/test/java/com/gs5/underwriting/submission/domain/SubmissionSearchAdversarialTest.java
+src/test/java/com/gs5/underwriting/submission/ReferenceLogInjectionTest.java
+src/test/java/com/gs5/underwriting/shared/kernel/ActorContextTest.java
+src/test/java/com/gs5/underwriting/submission/domain/SubmissionDomainRecordsTest.java
+src/test/java/com/gs5/underwriting/submission/domain/SubmissionQueryRecordsTest.java
+src/test/java/com/gs5/underwriting/submission/domain/InMemorySubmissionQueryRepository.java
+src/test/java/com/gs5/underwriting/submission/adapters/persistence/SubmissionQuerySqlAdapterIT.java

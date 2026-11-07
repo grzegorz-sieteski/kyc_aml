@@ -1,0 +1,133 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  Architecture gate that ArchUnit cannot cover.
+
+  ArchUnit reasons about *declared types*: it can forbid you from declaring a class that
+  extends Throwable, but it cannot see a `throw new IllegalArgumentException(...)` statement,
+  because IllegalArgumentException is a JDK class nobody declared here. That is the exact
+  hole through which the "zero exceptions" rule was broken twice while this architecture
+  was being designed. Checkstyle reads the syntax tree, so it closes it.
+
+  Applies to src/main/java only (includeTestSourceDirectory=false in pom.xml).
+-->
+<module name="Checker">
+    <property name="severity" value="error"/>
+    <property name="charset" value="UTF-8"/>
+    <property name="fileExtensions" value="java"/>
+
+    <module name="TreeWalker">
+
+        <!--
+          Railway Oriented Programming: business failures are values, not control flow.
+
+          Forbidden:  throw new AnythingException(...)  - that is a business branch,
+                                                          so it belongs in Result.failure(...)
+          Forbidden:  Objects.requireNonNull(...)       - it is a throw in disguise. Null is kept
+                                                          out at COMPILE time instead: @NullMarked
+                                                          on every package, enforced by NullAway,
+                                                          so there is no null to guard against.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="noThrowNew"/>
+            <property name="format" value="\bthrow\s+new\b"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="Zero-Exception rule: do not 'throw new ...'. Return Result.failure(new SomeError(...)) instead."/>
+        </module>
+
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="noRequireNonNull"/>
+            <property name="format" value="\brequireNonNull\s*\("/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="Zero-Exception rule: requireNonNull throws NullPointerException. Mark the parameter @Nullable and handle absence as a Result, or leave it non-null and let NullAway prove callers never pass null."/>
+        </module>
+
+        <!--
+          ScopedValue.callWhere / runWhere were REMOVED from the JDK (JDK 24); the final
+          Java 25 API is ScopedValue.where(KEY, value).call(op). Models reproduce the old
+          form from memory constantly, so fail the build on it and point at the helper.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="noScopedValueCallWhere"/>
+            <property name="format" value="ScopedValue\.(callWhere|runWhere)\b"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="ScopedValue.callWhere/runWhere do not exist in Java 25. Use ActorContext.callWith(actor, op) / ActorContext.runWith(actor, op)."/>
+        </module>
+
+        <!--
+          Wrong-library imports. Each of these was generated at least once while this
+          architecture was being designed, and each one fails only at compile time
+          (or worse, at runtime) without this check.
+        -->
+        <module name="IllegalImport">
+            <property name="id" value="forbiddenLibraries"/>
+            <property name="illegalPkgs"
+                      value="com.fasterxml.jackson,
+                             org.springframework.retry,
+                             jakarta.persistence,
+                             javax.persistence,
+                             org.hibernate,
+                             com.querydsl,
+                             org.jooq"/>
+            <property name="illegalClasses" value="java.lang.ThreadLocal"/>
+        </module>
+
+        <!-- Virtual threads: ScopedValue replaces ThreadLocal. -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="noThreadLocal"/>
+            <property name="format" value="\bnew\s+ThreadLocal\s*&lt;"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="ThreadLocal pins state to a carrier thread. On virtual threads use java.lang.ScopedValue."/>
+        </module>
+
+        <!-- Suffixes that smuggle a procedural layer back into a single-operation UseCase design. -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="noServiceSuffixDeclaration"/>
+            <property name="format" value="\b(class|interface|record)\s+\w+(Service|Facade|Manager|Helper|Util|Utils)\b"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="No *Service / *Facade / *Manager / *Helper / *Util types. Entry points are single-operation *UseCase classes (execute in domain/, ask in query/)."/>
+        </module>
+
+        <module name="IllegalCatch">
+            <property name="id" value="noCatchAll"/>
+            <property name="illegalClassNames" value="java.lang.Exception, java.lang.Throwable, java.lang.RuntimeException"/>
+        </module>
+
+        <!--
+          Zero Magic Numbers: raw, unnamed numeric literals are forbidden in business logic.
+          Use named constants (public/private static final) or Value Objects.
+        -->
+        <module name="MagicNumber">
+            <property name="id" value="noMagicNumbers"/>
+            <property name="ignoreNumbers" value="-1, 0, 1, 2"/>
+            <property name="ignoreAnnotation" value="true"/>
+            <property name="ignoreHashCodeMethod" value="true"/>
+            <property name="ignoreFieldDeclaration" value="false"/>
+        </module>
+
+        <!--
+          Field injection ban: dependencies must be injected via constructor.
+          Direct field annotation with @Autowired is forbidden.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="noFieldAutowired"/>
+            <property name="format" value="^\s*@Autowired\s+(private|protected|public)?\s*[A-Za-z0-9_&lt;&gt;]+\s+[a-zA-Z0-9_]+;"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="Field injection with @Autowired is forbidden. Use explicit constructor injection."/>
+        </module>
+
+        <module name="UnusedImports"/>
+        <module name="RedundantImport"/>
+        <module name="EqualsHashCode"/>
+        <module name="StringLiteralEquality"/>
+    </module>
+</module>

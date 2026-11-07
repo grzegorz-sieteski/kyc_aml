@@ -1,0 +1,19 @@
+# Files an agent is not supposed to edit on its own authority.
+#
+# A write lock stated in a prompt is a suggestion. Requiring a human review on these paths is
+# what makes it cost something to cross the boundary. Replace @your-org/... with real teams
+# and enable "Require review from Code Owners" in branch protection, or this file does nothing.
+
+# Tests are owned by the test designer. A pull request that changes an assertion to make the
+# build pass must be looked at by a person.
+/src/test/                      @your-org/engineering
+
+# Business rules. An invented threshold that lands here becomes production behaviour.
+/docs/specs/                    @your-org/product
+
+# The gates themselves. Weakening a rule must never be quieter than following it.
+/config/checkstyle/             @your-org/engineering
+/src/test/resources/archunit.properties  @your-org/engineering
+/.github/workflows/             @your-org/engineering
+/.github/agents/                @your-org/engineering
+/scripts/check-write-lock.sh    @your-org/engineering

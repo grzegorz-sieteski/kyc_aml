@@ -1,0 +1,34 @@
+# Normalise text files to LF in the repository.
+#
+# Files are already stored with LF here, because this clone happens to have core.autocrlf=true.
+# That is a per-developer setting, not a property of the repository: someone cloning with
+# autocrlf=false on Windows would commit CRLF. This file makes the guarantee explicit.
+#
+# It matters most for shell scripts. The CI workflow runs `bash scripts/check-write-lock.sh` on
+# Linux, and a script stored with CRLF fails there with `$'\r': command not found` — breaking the
+# write-lock gate itself while looking like an unrelated CI glitch.
+
+* text=auto
+
+# Must be LF wherever they are checked out: these run under bash, including on Linux runners.
+*.sh            text eol=lf
+mvnw            text eol=lf
+
+# Windows batch files need CRLF.
+*.cmd           text eol=crlf
+*.bat           text eol=crlf
+
+# Keep Java, config and docs LF everywhere so diffs stay clean across platforms.
+*.java          text eol=lf
+*.xml           text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.sql           text eol=lf
+*.md            text eol=lf
+*.properties    text eol=lf
+
+*.jar           binary
+
+# Maven reads these line by line as JVM options; a stray CR corrupts the last token of each line.
+.mvn/jvm.config text eol=lf
+.mvn/maven.config text eol=lf
