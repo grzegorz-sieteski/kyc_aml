@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 4 · Status: IN_PROGRESS (stage 3 RED for R-01 to R-20 done; developer next)
+Stage: 6 · Status: AWAITING RE-REVIEW (R-01 to R-20 fixed, `./mvnw -B verify` green; independent re-review of the fix not yet run)
 Updated: 2026-11-08
 
 ## Source
@@ -210,3 +210,30 @@ Gate: `check-write-lock.sh red` OK (test-compile passes, `test` fails). `./mvnw 
 run, 5 failures (all new); Failsafe 150 run, 63 failures and 1 error, every one a new or stage 5 test
 failing for the reason it names. Seven new cases pass already by design (order guards: 401 before the
 body, role before size, D-08).
+
+## Stage 4 (second round): R-01 to R-20 implemented (2026-11-08)
+
+`@developer` in a fresh context, `src/main/` and `pom.xml` only (commit `8a44571`). The green write lock
+held: `git diff 619ad52 8a44571 -- src/test docs` is empty. The developer reported one stale stage 3
+test instead of editing it (`RecordComplianceDecisionUseCaseTest.shouldRefuseAMissingVersion`, still
+pre-D-12); the test designer corrected it in `0b4aabf`.
+
+Orchestrator's own run at `0b4aabf`: `./mvnw -B verify` → 0 Checkstyle violations; Surefire 312 tests,
+0 failures; Failsafe 150 tests, 0 failures; BUILD SUCCESS; no `Unsupported class file` warning.
+
+Found on the way, confirmed in the Boot 4.1.2 metadata: `server.error.*` is removed in Spring Boot 4.0
+(`level: error`, replacement `spring.web.error.*`). The old `include-message: never` and
+`include-stacktrace: never` were never bound; both reviews took them as a control. They now live under
+`spring.web.error`, with `include-path: never`.
+
+Deviations from the addendum, accepted: `ActorContextResolver.identify(BookingCentres)` takes the centres
+as an argument (the tests subclass the resolver through its no-argument constructor); the
+`service_role` placeholder is set from the service's own connection in `RiskDatabaseConfiguration`.
+
+Known, not fixed: `RelayPressureSpike` (not a gated test) fails when run by hand, because it adds the V3
+lease columns again. Local `spring-boot:run` now needs `FLYWAY_USERNAME` and `FLYWAY_PASSWORD` too.
+
+## Next
+
+An independent re-review (code and security, read-only, fresh context) of `66a9642..0b4aabf`. If it
+approves, the module goes to the product owner; identity source and dead-letter handling stay open.

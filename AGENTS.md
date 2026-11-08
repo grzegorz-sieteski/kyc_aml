@@ -13,7 +13,7 @@ Read this before anything else; `.github/copilot-instructions.md` holds the hard
 ./mvnw -B verify -DskipITs                           # skip ITs when Docker is unavailable
 ./mvnw -B test -Dtest=ArchitectureRulesTest          # architecture rules only
 ./mvnw -B test -Dtest=ResultTest                     # one test class
-./mvnw -B spring-boot:run                            # run locally (needs Postgres)
+./mvnw -B spring-boot:run                            # run locally (needs Postgres; DATABASE_* and FLYWAY_* env, D-11)
 ```
 
 JDK 25 is required. Integration tests (`*IT.java`) need a running Docker daemon.
@@ -134,3 +134,9 @@ Be honest about this, because the distinction matters:
   per-rule escape hatch left anywhere. Keep it that way: with it false, a typo in a package name
   turns a rule into a green test that checks nothing, and you will trust it.
 - `openapi/` is empty: the four endpoints of `risk` have no published contract yet.
+- **Spring Boot 4 does not bind `server.error.*`** (removed in 4.0.0; use `spring.web.error.*`). A
+  property under the old prefix is silently ignored, which is how `include-stacktrace: never` sat in
+  `application.yml` doing nothing until 2026-11-08. Check a property against the Boot metadata before
+  trusting it as a control.
+- Migrations run as the schema owner (`FLYWAY_USERNAME`), the service as a role that owns nothing
+  (`DATABASE_USERNAME`); `V5` grants it its rights through the Flyway placeholder `service_role`.
