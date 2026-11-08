@@ -270,14 +270,14 @@ class RecordComplianceDecisionUseCaseTest {
     }
 
     @Test
-    @DisplayName("a missing version viewed is version 0 and is never current (BR-33)")
+    @DisplayName("a missing version viewed is version 0, which is not a valid version (BR-33, D-12)")
     void shouldRefuseAMissingVersion() {
         exposed("C-1");
         var command = RecordComplianceDecisionCommand.parse(
                 new RawRecordComplianceDecision("C-1", "FREEZE_ASSETS", REASON, null)).toOptional().orElseThrow();
 
         assertThat(decide.execute(L2_IN_DE, command))
-                .isEqualTo(Result.failure(new RecordComplianceDecisionError.RiskProfileChangedSinceViewed()));
+                .isEqualTo(Result.failure(new RecordComplianceDecisionError.VersionViewedNotValid()));
     }
 
     @Test

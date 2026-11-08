@@ -57,7 +57,7 @@ class RecordComplianceDecisionCommandParseTest {
     }
 
     @Test
-    @DisplayName("a missing version is version 0, which no profile has, so it is never current (BR-33)")
+    @DisplayName("a missing version is carried as version 0, which the use case refuses as not valid (BR-33, D-12)")
     void shouldTreatAMissingVersionAsZero() {
         var command = parse("C-1000", "CLEAR_FALSE_POSITIVE", REASON, null).toOptional().orElseThrow();
 
