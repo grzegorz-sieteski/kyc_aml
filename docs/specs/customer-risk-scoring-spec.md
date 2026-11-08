@@ -20,6 +20,11 @@ owner's answers of 2026-11-07 recorded below.
 | D-05 | 2026-11-05 | Stated by the product owner as a general rule: the technical identity of a record is never exposed outside the service. A record is named by its business identifier. |
 | D-06 | 2026-11-07 | The booking centres in scope are in the United States (US), the United Kingdom (GB) and Germany (DE, under EU rules). No other jurisdiction is evaluated in this increment. |
 | D-07 | 2026-11-07 | Assumptions A-01 to A-31 are confirmed as written, with A-16 and A-18 applying to the three booking centres of D-06. |
+| D-08 | 2026-11-08 | A-27 is amended for decisions: the role is judged before the kind of decision. A kind that is not recognised is judged against the permission to freeze assets, the narrowest one, so a caller who may not freeze learns nothing about whether the kind was valid. Only a caller who passes that check is told the kind is not recognised. Raised by the stage 6 reviews (R-04). |
+| D-09 | 2026-11-08 | The input of one request is limited in size: at most 64 KiB for an evaluation and 16 KiB for a decision. Larger input is refused as **request too large** once the caller is identified, without being read further (R-01). |
+| D-10 | 2026-11-08 | An evaluation carries at most 10 citizenships. More are refused as **too many citizenships** (R-10). |
+| D-11 | 2026-11-08 | The service works with database rights that cannot change its own structure or rewrite the recorded history: the structure is created and changed by a separate owner, and the service may only add to the history and read it (R-09). |
+| D-12 | 2026-11-08 | Input is read strictly. Input that is not a single well-formed object, or that names a field twice, is refused as **request not readable**. A field whose value is of the wrong kind (a number or text where yes or no is required, text or a fraction where a version is required) is refused as that field's own refusal, never coerced. A version viewed that is missing, not a whole number or below 1 is refused as **version viewed not valid** (R-06, R-07). |
 
 ## Scope
 
@@ -99,7 +104,7 @@ with a marker is not confirmed until that assumption is.
 
 | ID | Rule | Condition | Expected outcome / refusal |
 |---|---|---|---|
-| `BR-01` | A caller must be identified before any operation | No caller is known: no booking centre, identity and role together | Refused: **caller not identified**. Nothing is recorded and nothing is returned |
+| `BR-01` | A caller must be identified before any operation | No caller is known: no booking centre, identity and role together; or the caller's booking centre is not one of the booking centres in scope (D-06) | Refused: **caller not identified**. Nothing is recorded and nothing is returned |
 | `BR-02` | Each operation, and each kind of compliance decision, is open only to the roles listed for it (A-02) | The caller's role is not listed for the operation or decision | Refused: **role may not perform this operation** |
 | `BR-03` | The role is decided before any input is examined (A-03) | Any operation is attempted | A caller whose role is not permitted learns nothing about whether the input was valid or whether the customer exists |
 | `BR-04` | An operation reaches only risk profiles of the caller's own booking centre (A-04) | The customer number names a profile of another booking centre, or no profile at all | The two cases are indistinguishable to the caller: both are **customer not found** |
@@ -111,11 +116,11 @@ with a marker is not confirmed until that assumption is.
 |---|---|---|---|
 | `BR-06` | A customer number must be supplied, is at most 64 characters long, contains no control character, and is compared exactly as supplied (A-06) | Missing or empty; longer than 64 characters; contains a control character | Refused: **customer number missing**, **customer number too long**, or **customer number contains a control character**. Two numbers differing in any character, including letter case or spaces, are different numbers |
 | `BR-07` | The customer profile class must be one of the five listed classes (A-07) | Missing, or any other value | Refused: **customer profile class not recognised** |
-| `BR-08` | The residence country, the birth country and the login country are each exactly one country; citizenship is one or more countries. Each is a valid ISO 3166-1 alpha-2 code (A-08) | A country is missing; a code is not a valid ISO 3166-1 alpha-2 code; no citizenship is given | Refused: **country missing or not valid**, naming which country (residence, citizenship, birth or login); or **no citizenship given** |
+| `BR-08` | The residence country, the birth country and the login country are each exactly one country; citizenship is one to 10 countries (D-10). Each is a valid ISO 3166-1 alpha-2 code (A-08) | A country is missing; a code is not a valid ISO 3166-1 alpha-2 code; no citizenship is given; more than 10 citizenships are given | Refused: **country missing or not valid**, naming which country (residence, citizenship, birth or login); **no citizenship given**; or **too many citizenships** |
 | `BR-09` | The residence country, every citizenship country and the birth country each carry their geographic risk class, supplied with the evaluation (A-09) | A class is missing for one of those countries, or is not one of the three classes | Refused: **geographic risk class missing or not recognised**, naming the country |
-| `BR-10` | The onboarding channel is branch or remote; the high-risk product request is yes or no | The channel is missing or any other value; the product request is missing | Refused: **onboarding channel not recognised**, or **product request missing** |
+| `BR-10` | The onboarding channel is branch or remote; the high-risk product request is yes or no | The channel is missing or any other value; the product request is missing or is not yes or no (D-12) | Refused: **onboarding channel not recognised**, or **product request missing** |
 | `BR-11` | The adverse media class is one of the three listed classes, supplied with the evaluation (A-10) | Missing, or any other value | Refused: **adverse media class not recognised** |
-| `BR-12` | Each of the three critical facts is supplied as yes or no with every evaluation (A-11) | Any of the three is missing | Refused: **critical fact missing**, naming which |
+| `BR-12` | Each of the three critical facts is supplied as yes or no with every evaluation (A-11) | Any of the three is missing, or is not yes or no (D-12) | Refused: **critical fact missing**, naming which |
 | `BR-13` | An evaluation is complete. A re-evaluation replaces every input of the previous one; nothing is carried over (A-12) | A re-evaluation is attempted | It is judged on its own inputs alone, by exactly the same rules as a first evaluation |
 
 ### Scoring
@@ -156,11 +161,11 @@ with a marker is not confirmed until that assumption is.
 | ID | Rule | Condition | Expected outcome / refusal |
 |---|---|---|---|
 | `BR-32` | **Freeze assets** sets the decided track to Red. **Escalate to enhanced due diligence** sets the decided track to Orange. **Clear as false positive** removes the decided track, so the effective track becomes the evaluated track of the latest evaluation (A-24) | A decision is recorded | The effective track and the restriction (BR-28) change accordingly |
-| `BR-33` | A decision carries the version of the risk profile the deciding person was looking at. It is recorded only if that is still the current version | The current version differs from the version carried | Refused: **risk profile changed since viewed**. Nothing is recorded; the deciding person must look again |
+| `BR-33` | A decision carries the version of the risk profile the deciding person was looking at. It is recorded only if that is still the current version | The version carried is missing, not a whole number or below 1 (D-12); the current version differs from the version carried | Refused: **version viewed not valid**; or **risk profile changed since viewed**. Nothing is recorded; the deciding person must look again |
 | `BR-34` | A justification must be supplied: at least 20 characters, at most 2 000 characters. It may contain line breaks; it contains no other control character (A-25) | Missing; shorter than 20 characters; longer than 2 000 characters; contains a control character other than a line break | Refused: **justification missing**, **justification too short**, **justification too long**, or **justification contains a control character** |
 | `BR-35` | A decision that changes nothing, or that would lower a decided track other than by clearing, is refused. The test is the decided track, not the effective one: freezing a customer who is Red by evaluation alone is allowed, because it makes the freeze survive later evaluations (BR-31) (A-26) | Freeze when the decided track is already Red; escalate when the decided track is already Orange or Red; clear when no decided track exists | Refused: **already frozen**, **already escalated**, or **nothing to clear** |
 | `BR-36` | A decided track cannot be cleared while a critical fact is in force | Clear as false positive, and the latest evaluation has a critical fact in force | Refused: **critical fact in force**. The customer stays on Red |
-| `BR-37` | A decision is judged in a fixed order, and the first failure found is the one refusal the caller receives (A-27) | Any decision | Caller identified (BR-01); the kind of decision is recognised (BR-32); role permits this kind of decision (BR-02); customer found in the caller's booking centre (BR-04); justification valid (BR-34); version current (BR-33); critical fact (BR-36); the decision changes something (BR-35); no concurrent change (BR-30) |
+| `BR-37` | A decision is judged in a fixed order, and the first failure found is the one refusal the caller receives (A-27) | Any decision | Caller identified (BR-01); request not too large and readable (D-09, D-12); role permits this kind of decision, an unrecognised kind being judged as freezing assets (BR-02, D-08); the kind of decision is recognised (BR-32); customer found in the caller's booking centre (BR-04); justification valid (BR-34); version viewed valid and current (BR-33); critical fact (BR-36); the decision changes something (BR-35); no concurrent change (BR-30) |
 | `BR-38` | A decision records who decided, when, which decision, the justification, and the version it was taken on. It changes neither the score nor the explanation | A decision is recorded | The compliance view shows the latest decision with these details |
 
 ### Views and tipping-off
@@ -211,18 +216,21 @@ from the clock.
 |---|---|---|
 | 1 | Caller not identified | BR-01 |
 | 2 | Role may not perform this operation | BR-02, BR-03 |
-| 3 | Customer number missing | BR-06 |
-| 4 | Customer number too long | BR-06 |
-| 5 | Customer number contains a control character | BR-06 |
-| 6 | Customer profile class not recognised | BR-07 |
-| 7 | Country missing or not valid (naming which) | BR-08 |
-| 8 | No citizenship given | BR-08 |
-| 9 | Geographic risk class missing or not recognised (naming the country) | BR-09 |
-| 10 | Onboarding channel not recognised | BR-10 |
-| 11 | Product request missing | BR-10 |
-| 12 | Adverse media class not recognised | BR-11 |
-| 13 | Critical fact missing (naming which) | BR-12 |
-| 14 | Risk profile changed concurrently | BR-30 |
+| 3 | Request too large | D-09 |
+| 4 | Request not readable | D-12 |
+| 5 | Customer number missing | BR-06 |
+| 6 | Customer number too long | BR-06 |
+| 7 | Customer number contains a control character | BR-06 |
+| 8 | Customer profile class not recognised | BR-07 |
+| 9 | Country missing or not valid (naming which) | BR-08 |
+| 10 | No citizenship given | BR-08 |
+| 11 | Too many citizenships | BR-08, D-10 |
+| 12 | Geographic risk class missing or not recognised (naming the country) | BR-09 |
+| 13 | Onboarding channel not recognised | BR-10 |
+| 14 | Product request missing | BR-10 |
+| 15 | Adverse media class not recognised | BR-11 |
+| 16 | Critical fact missing (naming which) | BR-12 |
+| 17 | Risk profile changed concurrently | BR-30 |
 
 No other refusal exists for this command. A refusal records nothing (BR-42).
 
@@ -267,22 +275,26 @@ Nothing else is accepted. The deciding caller and the moment come from the calle
 | # | Refusal reason | Rule |
 |---|---|---|
 | 1 | Caller not identified | BR-01 |
-| 2 | Kind of decision not recognised | BR-32 |
-| 3 | Role may not perform this operation | BR-02, BR-03 |
-| 4 | Customer not found | BR-04 |
-| 5 | Justification missing | BR-34 |
-| 6 | Justification too short | BR-34 |
-| 7 | Justification too long | BR-34 |
-| 8 | Justification contains a control character | BR-34 |
-| 9 | Risk profile changed since viewed | BR-33 |
-| 10 | Critical fact in force | BR-36 |
-| 11 | Already frozen | BR-35 |
-| 12 | Already escalated | BR-35 |
-| 13 | Nothing to clear | BR-35 |
-| 14 | Risk profile changed concurrently | BR-30 |
+| 2 | Request too large | D-09 |
+| 3 | Request not readable | D-12 |
+| 4 | Role may not perform this operation | BR-02, BR-03, D-08 |
+| 5 | Kind of decision not recognised | BR-32 |
+| 6 | Customer not found | BR-04 |
+| 7 | Justification missing | BR-34 |
+| 8 | Justification too short | BR-34 |
+| 9 | Justification too long | BR-34 |
+| 10 | Justification contains a control character | BR-34 |
+| 11 | Version viewed not valid | BR-33, D-12 |
+| 12 | Risk profile changed since viewed | BR-33 |
+| 13 | Critical fact in force | BR-36 |
+| 14 | Already frozen | BR-35 |
+| 15 | Already escalated | BR-35 |
+| 16 | Nothing to clear | BR-35 |
+| 17 | Risk profile changed concurrently | BR-30 |
 
-The role is decided on the kind of decision, so an unrecognised kind is refused right after the
-caller is identified and before the role (A-27).
+The role is decided on the kind of decision, and is judged before the kind (D-08, amending A-27): an
+unrecognised kind is judged against the permission to freeze assets, so a caller who may not freeze is
+refused for the role, and only a caller who may freeze is told that the kind is not recognised.
 
 **Business fact that follows success:** a new state of the risk profile is recorded, one version
 higher, with the decided track (or its removal), the effective track and the restriction, and the
@@ -444,6 +456,8 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 
 **A-27.**
 > `CONFIRMED 2026-11-07 (D-07): the order of refusals in both command catalogues, including that an unrecognised kind of decision is refused before the role is judged. Source: analyst default, following the template project's confirmed ordering principle; ARGON is silent.`
+>
+> `AMENDED 2026-11-08 (D-08): for decisions the role is judged before the kind; an unrecognised kind is judged against the permission to freeze assets. The size and readability refusals of D-09 and D-12 come right after the caller is identified (command 2) or after the role (command 1).`
 
 **A-28.**
 > `CONFIRMED 2026-11-07 (D-07): the two front-office statuses and their messages. Source: ARGON gives the messages in Polish ("Konto aktywne – brak ograniczeń operacyjnych." and "Trwa standardowa weryfikacja administracyjna dokumentacji."); the English wording and the two status names are analyst translations.`
@@ -463,4 +477,5 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 - [x] Every command lists all its refusal reasons, in order
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
-- [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07)
+- [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07); A-27 amended on 2026-11-08 (D-08)
+- [x] The stage 6 decisions D-08 to D-12 (2026-11-08) are reflected in BR-01, BR-08, BR-10, BR-12, BR-33, BR-37 and both catalogues

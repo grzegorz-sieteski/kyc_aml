@@ -445,3 +445,112 @@ The numbers come from one saturating synthetic load on one machine. Before stage
 lease and budget, repeat the spike with the production pool size and a realistic request mix. It shows
 the shape, that 2b avoids the pathologies and that 1 and 4 should not be chosen; it does not size the
 configuration.
+
+---
+
+## Addendum 2026-11-08: stage 6 fixes (R-01 to R-20, decisions D-08 to D-12)
+
+Source: the consolidated stage 5 and stage 6 list on the state board, and the product owner's
+decisions D-08 to D-12 in the specification. This addendum replaces §10's description of how a body
+is read, and adds to §9 and §8. Everything not named here stays as designed.
+
+### A. The edge reads in a fixed order (R-01, R-02, R-05, D-08, D-09, D-12)
+
+1. **Identify.** `ActorContextResolver` gets one final method the resources call, `identify()`: the
+   identity source's caller (`resolve()`, the method tests override), kept only when
+   `BookingCentres.jurisdictionOf(tenant)` is present. A caller of an unconfigured booking centre is
+   therefore *not identified* (401) on all four routes, before anything else (BR-01 as amended).
+   `EvaluateCustomerRiskError.BookingCentreUnknown` stays as defence in depth in the use case, and the
+   resource maps it to the same 401 `caller-not-identified` problem; the 422 `booking-centre-unknown`
+   answer disappears.
+2. **Evaluate only: the role**, which needs no input.
+3. **Read the body, bounded.** No resource binds `@RequestBody String` any more. A package-private
+   `web/BoundedBody` reads the servlet input stream only after steps 1 (and 2): a declared
+   `Content-Length` above the limit is refused without reading; otherwise at most limit + 1 bytes are
+   read, so a chunked body cannot exceed it either. Limits are named constants: 64 KiB (65 536 bytes)
+   for an evaluation, 16 KiB (16 384 bytes) for a decision. Too large → **413
+   `request-too-large`**. An `IOException` is caught by its exact type and counts as not readable.
+4. **Parse strictly into a tree.** A dedicated strict reader (not the application `JsonMapper`, and
+   not the mapper that reads stored JSON) parses the bytes as UTF-8 into a JSON tree with duplicate
+   key detection on. Anything that is not exactly one JSON object (absent body, empty body, array,
+   `null`, scalar, malformed JSON, a duplicate key, trailing content) → **400 `request-not-readable`**.
+5. **Read each field by its JSON type, never coerced.** From the object, each raw field is taken only
+   when its node has the expected JSON type: string for text and enumerations, boolean for yes/no,
+   object for a rated country, array for citizenships, integral number within `long` for the version
+   viewed. A node of any other type is treated as absent, so the field's own refusal applies
+   (`critical-fact-missing`, `product-request-missing`, `profile-class-not-recognised`, …), never a
+   neighbouring one (R-07). Unknown fields stay ignored.
+6. **Decide only: the role, from the kind (D-08).** The permission is chosen from the parsed kind, an
+   unrecognised kind falling back to `FREEZE_ASSETS`; then `DecisionKindNotRecognised` for a caller who
+   passed. Because the kind is read on its own (step 5), a mistyped other field no longer changes the
+   permission (R-02).
+7. Then the command's own parse and the use case, as before.
+
+### B. New refusals and their problems
+
+| Refusal | Command | Domain | Problem |
+|---|---|---|---|
+| Request too large (D-09) | both | none: decided at the edge | 413 `request-too-large` |
+| Request not readable (D-12) | both | none: decided at the edge | 400 `request-not-readable` |
+| Too many citizenships (D-10) | evaluate | `EvaluateCustomerRiskError.TooManyCitizenships`, after `NoCitizenship`; limit `MAX_CITIZENSHIPS = 10` | 400 `too-many-citizenships` |
+| Version viewed not valid (D-12) | decide | `RecordComplianceDecisionError.VersionViewedNotValid`, judged after the justification and before `RiskProfileChangedSinceViewed`; valid means present and ≥ 1 | 400 `version-viewed-not-valid` |
+
+The command keeps the version viewed as a not-yet-judged value, the same way it already carries the
+justification, so the BR-37 order is decided in the use case.
+
+### C. Customer number taken from the raw path (R-03)
+
+Spring's path matching strips `;…` from a segment. The four resources take the customer number from
+the raw request URI instead: the segment after `/api/risk-profiles/`, percent-decoded as UTF-8
+(`UriUtils.decode`), so a literal `;` stays part of the number (BR-06: compared exactly). The route
+mappings stay as they are; only the value comes from the raw segment. A segment Tomcat already
+refuses (`%00`, `%2F`, `%5C`, invalid UTF-8) is still refused by Tomcat.
+
+### D. Errors outside the four resources (R-08)
+
+An `ErrorController` in `adapters/web` answers every container error with a constant RFC 7807
+problem, `urn:problem-type:risk:request-not-handled`, the status taken from the servlet error status
+(4xx or 5xx, anything else 404), constant detail and constant `instance` `/api/risk-profiles`. No
+path, message, exception or trace. `server.error.include-path: never` is set as a second guard.
+
+### E. Responses
+
+Every response of the four resources carries `Cache-Control: no-store` (R-18).
+
+### F. Confidential `toString` (R-11)
+
+`CriticalFacts`, `RatedCountry`, `Explanation` and `CategoryContribution` override `toString` as
+`Type[***]`, like the records around them.
+
+### G. Relay (R-13, R-14)
+
+- `ViewProjector` maps to `ProjectionFailure` only failures that belong to the event itself
+  (`DataIntegrityViolationException`, unreadable JSON). A `TransientDataAccessException` (deadlock,
+  lock or query timeout) is not a projection failure: the chunk is released like a pool failure and
+  no attempt is counted.
+- `markDelivered` and `countAttempt` add `AND locked_by = :owner`; a relay whose lease was taken over
+  changes nothing.
+
+### H. Schema and database rights (R-09, R-17, R-20)
+
+- **V4** adds a `BEFORE TRUNCATE ... FOR EACH STATEMENT` trigger on `command.risk_profile_history`
+  that refuses. The total-score `CHECK` of §9 is deferred: the score lives inside the evaluation
+  document and is already capped by `RiskScore`; the deviation is recorded here instead.
+- **Two roles (D-11).** Flyway runs as the schema owner: `spring.flyway.user: ${FLYWAY_USERNAME}`,
+  `spring.flyway.password: ${FLYWAY_PASSWORD}`, no defaults. The service connects as
+  `DATABASE_USERNAME`, passed to migrations as the Flyway placeholder `service_role`. **V5** grants
+  that role `USAGE` on both schemas, `SELECT, INSERT, UPDATE` on the mutable tables, and only
+  `SELECT, INSERT` on `command.risk_profile_history`; it owns nothing, so it cannot disable the
+  append-only triggers.
+- The ERROR log in `RiskProfileSqlAdapter` no longer prints the internal profile id (D-05).
+
+### I. Build and text (R-12, R-15, R-16)
+
+- `@NullMarked` on every package under `com.gs5.kycaml`; NullAway's `AnnotatedPackages` corrected to
+  `com.gs5.kycaml`. An architecture test asserts every package is `@NullMarked`.
+- The PostgreSQL-backed relay tests are `*IT` (Failsafe), so `./mvnw test` needs no Docker.
+- The front-office message uses the en dash of BR-40: `Account active – no operational restrictions.`
+
+### Not changed
+
+R-19 (the 403 names the caller's own role) is kept. R-21 nits are optional.
