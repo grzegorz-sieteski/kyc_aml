@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 5 · Status: CHANGES REQUIRED (stage 5 found four defects; back to stage 3 per AGENTS.md)
+Stage: 6 · Status: CHANGES REQUIRED (stage 5 and both stage 6 reviews rejected; back to stage 3 per AGENTS.md)
 Updated: 2026-11-08
 
 ## Source
@@ -26,7 +26,7 @@ interface yet; ARGON's numbers are not confirmed and appear as assumptions.
 | 3 | `@test-designer` | contracts and failing tests | **Done** for the domain (RED proved); web edge written with its tests and proved by mutation | commit `d87f0fd` |
 | 4 | `@developer` | production code | **Done**: `./mvnw -B verify` 332 unit, 37 IT green (re-run 2026-11-08 on JDK 25.0.4, PostgreSQL 17) | commit `894c0a8` |
 | 5 | `@qa-explorer` | `requests/customer-risk-scoring-exploratory.http`, `RiskApiAdversarialIT` | **[REJECTED]**: QA-01 to QA-04, 14 failing cases; 17 guard cases pass; `check-write-lock.sh qa` OK | 2026-11-08 |
-| 6 | `@code-reviewer` + `@sec-reviewer` | review reports | not started | — |
+| 6 | `@code-reviewer` + `@sec-reviewer` | review reports (below) | **[CHANGES REQUIRED]** both; each in a fresh read-only context that did not see the stage 5 report | 2026-11-08 |
 
 ## Carried to stage 2: where ARGON and this harness disagree
 
@@ -58,9 +58,9 @@ None. Known gaps: no identity source (every call is 401 until one is chosen), no
 
 ## Next
 
-Stage 6 (code and security review, read-only) runs on the current state; its findings join QA-01 to
-QA-04. Then back to stage 3: the failing tests for QA-01 to QA-04 already exist in
-`RiskApiAdversarialIT`, so `@developer` fixes `src/main/` until they pass, with `src/test/` frozen.
+Back to stage 3 with the consolidated list below. `@test-designer` writes a failing test for every
+R-xx not yet covered (QA-01 to QA-04 are), and corrects the three tests that pin behaviour the spec
+forbids. Items marked **PO** wait for a product owner decision before their test is written.
 
 ## Status (2026-11-07)
 
@@ -145,3 +145,45 @@ nested 5 000 deep read as no input; a `tenantId` smuggled into the body ignored.
 - `GET /error` answers 500 with status 999 (Spring Boot default).
 - A duplicate `"kind"` key: the last one wins for both the permission check and the command, so the role
   check is not bypassed (an L1 sending `FREEZE_ASSETS` then `ESCALATE_EDD` escalates, which L1 may do).
+
+## Stage 6 report: consolidated (2026-11-08)
+
+Two independent read-only reviews at `22d1f43` (`@code-reviewer` CR-xx, `@sec-reviewer` SR-xx). Neither
+saw the stage 5 report; both found QA-01 to QA-04 again on their own. The orchestrator checked four
+claims directly: the en dash (code has ASCII `-`, BR-40 has `–`), the `*Test` placement, and NullAway by
+breaking it on purpose (a `@Nullable` dereference fails the build in `risk/domain`, compiles cleanly in
+`risk/adapters/web`).
+
+**Held, per both reviews:** no `throw`, catch-all or `*Service`; aggregate package-private and pure;
+scoring BR-14 to BR-27 and examples E1 to E7; BR-30 optimistic locking; tenant filter on every SQL
+statement, all parameters named; 404 for foreign and unknown alike; no risk column in the front-office
+view; no internal id in a response body; the relay lease (2b), savepoint and version-gated projection;
+no password default, no actuator, stack traces off.
+
+| R | From | Severity | Finding | Decision |
+|---|---|---|---|---|
+| R-01 | SR-01 | Critical | Both POST routes bind `@RequestBody String`: the whole body is buffered before the caller is identified, with no size limit (5 MB accepted in stage 5). Anonymous memory exhaustion, live today | **PO**: body limits |
+| R-02 | SR-02, CR-6 | High | The decision body is fully parsed before the gate, for anonymous callers too; a mistyped field turns `ESCALATE_EDD` into the freeze permission, so 403 versus 200 depends on input validity (BR-03, BR-37 step 1) | fix |
+| R-03 | QA-03, SR-03, CR-3 | High | A literal `;` truncates the customer number: `C-1;x` writes `C-1` (BR-06) | fix: read the raw segment, keep `;` as data (no new refusal) |
+| R-04 | CR-1, SR-10 | High | An unknown decision kind is checked against the freeze permission, so the role is judged before the kind. BR-37 and A-27 say kind first. `RiskApiFlowIT.shouldRefuseTheRoleBeforeTheKind` pins the contradiction | **PO**: follow A-27, or amend it |
+| R-05 | CR-2, SR-04 | High | A booking centre with no jurisdiction gets 422 after body validation on evaluate, and is admitted on the other three routes. Design and `EvaluateCustomerRiskError` javadoc say caller not identified (401), before any input. `RiskApiFlowIT.shouldRefuseABookingCentreWithoutAJurisdiction` pins it | fix: 401 at identification, all four routes |
+| R-06 | QA-01, QA-02, SR-07, CR-4 | Medium | Lenient JSON coercion: `versionViewed` 1.9 or `"1"`, critical facts `0`/`2`/`"false"`. Also duplicate keys, last wins (`sanctionsMatch` true then false is recorded false) | fix: strict mapper for request bodies |
+| R-07 | CR-5 | Medium | One unreadable field makes the whole body absent, so the refusal names the profile class instead of the field | fix with R-06 |
+| R-08 | QA-04, SR-06, CR-9 | Medium | Container errors (404/405 outside the routes) echo the path with the customer number, not `problem+json` | fix |
+| R-09 | SR-08 | Medium | Flyway uses the runtime credentials, so the service owns its schemas and can disable the append-only trigger on the history | **PO**: separate migration role |
+| R-10 | SR-09 | Medium | `citizenships` has no upper bound; the list is kept forever in the append-only history | **PO**: maximum |
+| R-11 | SR-05 | Medium | `CriticalFacts`, `RatedCountry`, `Explanation`, `CategoryContribution` print their content in `toString` (BR-43); no log sink today | fix + reflection test |
+| R-12 | SR-14 (orchestrator verified) | Medium | NullAway is not applied to `risk/adapters/**`: no `@NullMarked` there, and `AnnotatedPackages` names `com.gs5.underwriting`. AGENTS.md claims all of `src/main` | fix: `@NullMarked` on adapter packages, correct the option |
+| R-13 | CR-7 | Medium | Transient `DataAccessException` (deadlock, timeout) counts a projection attempt; 10 park a healthy row | fix |
+| R-14 | CR-8 | Medium | `markDelivered` / `countAttempt` do not check `locked_by`; after a lease overrun two relays count one row twice | fix |
+| R-15 | CR-11 | Medium | Six PostgreSQL-backed `Outbox*Test` run in Surefire, so `./mvnw test` needs Docker | fix: rename to `*IT` |
+| R-16 | CR-10 | Low | Front-office text has `-`, BR-40 has `–`; `QueryUseCasesTest:97` pins the hyphen | fix: follow the spec |
+| R-17 | CR-12 | Low | Schema deviates from design section 9: no total-score `CHECK`; append-only trigger does not stop `TRUNCATE` | fix |
+| R-18 | SR-12 | Low | No `Cache-Control: no-store` on the compliance view | fix |
+| R-19 | SR-11 | Low | The 403 detail names the internal role constant | keep: own role, no risk data |
+| R-20 | SR-13 | Low | The internal profile id is written to the ERROR log (D-05) | fix |
+| R-21 | CR-13, CR-14, CR-15, CR-16 | Nit | Accumulating loops; a `Result` inside a command; one loose assertion; a stale column name and mixed-case UUIDs in kernel docs | optional |
+
+Unconfirmed, carried for later: format characters and lone surrogates in text (stage 5 saw them accepted;
+storage not checked); framework DEBUG logging would print the raw body; a lease overrun that holds view
+row locks; parked rows never reported; no test boots the real fail-closed resolver.
