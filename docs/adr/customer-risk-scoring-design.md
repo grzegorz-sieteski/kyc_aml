@@ -319,7 +319,7 @@ contracts and failing tests.
 ## Addendum 2026-11-07: relay connection pressure (state board, open design question)
 
 Status: **candidate 2b confirmed by the product owner on 2026-11-08. No change to `src/main/` has been made yet;
-it follows through stage 3 (failing tests) and stage 4.**
+it follows through stage 3 (failing tests) and stage 4. Stage 4 is done: candidate 2b is in `src/main` (2026-11-08).**
 Evidence: the spike `src/test/java/com/gs5/kycaml/risk/adapters/RelayPressureSpike.java` (not a `*Test` or
 `*IT`, so no Maven gate runs it; run it with `./mvnw -B test -Dtest=RelayPressureSpike`, about 6 minutes,
 needs Docker). It runs the real migrations, the real `ViewProjector` and the real `OutboxRelay` (as

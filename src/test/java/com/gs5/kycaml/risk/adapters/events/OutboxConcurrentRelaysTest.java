@@ -86,7 +86,12 @@ class OutboxConcurrentRelaysTest extends RelaySupport {
             } while (batch > 0);
 
             assertThat(delivered).isEqualTo(15);
-            assertThat(otherProjector.calls.keySet()).doesNotContainAnyElementsOf(held.calls.keySet());
+            // The holder blocks before it records a call, so ask the database which rows it still holds.
+            var heldCustomers = jdbc.sql("SELECT customer_number FROM command.outbox"
+                    + " WHERE status = 'PENDING' AND locked_by IS NOT NULL").query(String.class).list();
+            assertThat(heldCustomers).hasSize(5);
+            assertThat(otherProjector.calls.keySet()).hasSize(15)
+                    .noneMatch(call -> heldCustomers.stream().anyMatch(call::startsWith));
             release.countDown();
             assertThat(round.get(30, TimeUnit.SECONDS)).isEqualTo(5);
         }

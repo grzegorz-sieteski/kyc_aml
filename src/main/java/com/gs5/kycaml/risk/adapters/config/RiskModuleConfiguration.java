@@ -15,11 +15,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -71,7 +73,12 @@ class RiskModuleConfiguration {
 
     @Bean
     OutboxRelay outboxRelay(JdbcClient jdbc, ViewProjector projector, TransactionTemplate transaction, Clock clock,
-                            @Value("${app.outbox.relay.batch-size}") int batchSize) {
-        return new OutboxRelay(jdbc, projector, transaction, clock, batchSize);
+                            Environment environment,
+                            @Value("${app.outbox.relay.batch-size}") int batchSize,
+                            @Value("${app.outbox.relay.lease}") Duration lease,
+                            @Value("${spring.datasource.hikari.maximum-pool-size:10}") int poolSize) {
+        var budget = Optional.ofNullable(environment.getProperty("app.outbox.relay.connection-budget", Integer.class))
+                .orElseGet(() -> OutboxRelay.defaultConnectionBudget(poolSize));
+        return new OutboxRelay(jdbc, projector, transaction, clock, batchSize, budget, lease);
     }
 }

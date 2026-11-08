@@ -7,6 +7,7 @@ import com.gs5.kycaml.shared.kernel.Result;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
@@ -32,7 +33,11 @@ public class ViewProjector {
     public ViewProjector(JdbcClient jdbc, JsonMapper json, TransactionTemplate transaction, Clock clock) {
         this.jdbc = jdbc;
         this.json = json;
-        this.transaction = transaction;
+        // Nested: inside a caller's transaction a failing write rolls back to a savepoint, so it is a
+        // failure value and the caller's transaction stays usable; alone it is an ordinary transaction.
+        this.transaction = new TransactionTemplate();
+        this.transaction.setTransactionManager(transaction.getTransactionManager());
+        this.transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
         this.clock = clock;
     }
 

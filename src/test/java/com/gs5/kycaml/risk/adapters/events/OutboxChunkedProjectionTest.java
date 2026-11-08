@@ -56,6 +56,9 @@ class OutboxChunkedProjectionTest extends RelaySupport {
         rig.relay(rig.projector(), 100, BUDGET, LONG_LEASE).runOnce();
 
         assertThat(rig.meter.waitedWhileHolding).isEmpty();
+        assertThat(rig.meter.peak.get()).as("workers never queue for connections beyond the budget")
+                .isLessThanOrEqualTo(BUDGET);
+        assertThat(rig.meter.opened()).as("one connection per chunk, not one per event").isLessThanOrEqualTo(1 + BUDGET);
     }
 
     @Test

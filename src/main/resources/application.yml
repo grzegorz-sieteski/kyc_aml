@@ -20,6 +20,11 @@ app:
   outbox:
     relay:
       batch-size: 100
+      # How long a relay owns the rows it claimed. Much longer than the slowest chunk (a few hundred
+      # milliseconds); it is also the worst-case delay before another relay takes over after a crash.
+      lease: PT30S
+      # Connections the relay may use at once. Default: half the pool, never fewer than two.
+      # connection-budget: 5
       poll-interval: PT1S
 
 logging:

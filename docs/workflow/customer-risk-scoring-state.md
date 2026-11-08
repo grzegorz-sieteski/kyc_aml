@@ -101,3 +101,14 @@ no `throw`, no catch-all; harness rules unchanged.
 behaviour on a crash between claim and mark, on a pool of 10 and of 3), a recommendation, and a spike
 under `src/test/` or a scratch module that shows it; no change to `src/main/` until the design is
 confirmed.
+
+## Relay connection pressure: closed (2026-11-08)
+
+Candidate 2b of the ADR addendum is implemented: `V3__outbox_lease.sql`, a relay that leases a batch in a
+short transaction and projects one chunk per connection (budget `app.outbox.relay.connection-budget`,
+default half the pool, lease `app.outbox.relay.lease` = PT30S), a pool or commit failure that gives the rows
+back and counts no attempt, and a projector that runs in a savepoint. `./mvnw verify`: 332 unit, 37
+integration tests green. One test (`OutboxConcurrentRelaysTest.shouldLetTheOtherRelayWorkAroundALeasedBatch`)
+was wrong, not the code: it compared with calls the blocked holder had not yet recorded, and was changed to
+ask the database which rows are held. Not done: the spike was not re-run with the production pool size and a
+realistic request mix, which the ADR asks before the batch size, lease and budget are final.
