@@ -23,11 +23,14 @@ public record EvaluateCustomerRiskCommand(
         AdverseMediaClass adverseMedia,
         CriticalFacts criticalFacts) {
 
+    /** The most citizenships one evaluation may carry (BR-08, D-10). */
+    public static final int MAX_CITIZENSHIPS = 10;
+
     /**
      * Judges the fields in the order of the specification's catalogue: customer number, profile
-     * class, each country (residence, citizenships, birth, login), no citizenship, each geographic
-     * class, channel, product request, adverse media, then each critical fact. The first failure
-     * is the one returned.
+     * class, each country (residence, citizenships, birth, login), no citizenship, too many
+     * citizenships, each geographic class, channel, product request, adverse media, then each
+     * critical fact. The first failure is the one returned.
      */
     public static Result<EvaluateCustomerRiskCommand, EvaluateCustomerRiskError> parse(
             RawEvaluateCustomerRisk raw) {
@@ -87,6 +90,10 @@ public record EvaluateCustomerRiskCommand(
             }
             if (rawCitizenships.isEmpty()) {
                 return Result.failure(new EvaluateCustomerRiskError.NoCitizenship());
+            }
+            if (rawCitizenships.size() > MAX_CITIZENSHIPS) {
+                return Result.failure(new EvaluateCustomerRiskError.TooManyCitizenships(
+                        MAX_CITIZENSHIPS, rawCitizenships.size()));
             }
 
             var residenceClass = classOf(raw.residence());

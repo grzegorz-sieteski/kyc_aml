@@ -19,6 +19,9 @@ public sealed interface RecordComplianceDecisionError {
 
     record JustificationControlCharacter(int codePoint, int index) implements RecordComplianceDecisionError { }
 
+    /** BR-33, D-12: the version viewed is missing, or not a whole number of at least 1. */
+    record VersionViewedNotValid() implements RecordComplianceDecisionError { }
+
     record RiskProfileChangedSinceViewed() implements RecordComplianceDecisionError { }
 
     record CriticalFactInForce() implements RecordComplianceDecisionError { }

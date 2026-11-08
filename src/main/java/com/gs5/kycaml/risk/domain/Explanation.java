@@ -24,4 +24,11 @@ public record Explanation(
         BigDecimal behaviouralWeight,
         BigDecimal multiplier,
         List<CriticalFactField> criticalFacts,
-        boolean nonProfitFloorApplied) { }
+        boolean nonProfitFloorApplied) {
+
+    /** Confidential (BR-43): never printed. */
+    @Override
+    public String toString() {
+        return "Explanation[***]";
+    }
+}

@@ -196,8 +196,9 @@ public class RiskProfileSqlAdapter implements RiskProfileRepository {
                     evaluation, instant(rs, "evaluated_at"), decidedTrack, decision, rs.getLong("version"),
                     instant(rs, "updated_at")));
         } catch (JacksonException unreadable) {
-            LOG.error("Stored risk profile {} cannot be read back and is treated as not found",
-                    rs.getObject("id", UUID.class));
+            // Never the internal id (D-05): a shipped log is outside the service. The type says what failed.
+            LOG.error("A stored risk profile cannot be read back and is treated as not found ({})",
+                    unreadable.getClass().getSimpleName());
             return Optional.empty();
         }
     }

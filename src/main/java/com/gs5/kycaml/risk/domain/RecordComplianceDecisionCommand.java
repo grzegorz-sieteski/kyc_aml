@@ -10,9 +10,9 @@ import com.gs5.kycaml.shared.kernel.Result;
  * judges the customer before the justification (BR-37), so the use case looks the customer up first
  * and only then opens the result.
  *
- * @param versionViewed the version the deciding person was looking at; a missing version is
- *                      version 0, which no profile ever has, so it is refused as "changed since
- *                      viewed" (BR-33)
+ * @param versionViewed the version the deciding person was looking at, not yet judged: a missing
+ *                      version is version 0, and the use case refuses any version below 1 as
+ *                      "version viewed not valid" after the justification (BR-33, BR-37, D-12)
  */
 public record RecordComplianceDecisionCommand(
         CustomerNumber customerNumber,

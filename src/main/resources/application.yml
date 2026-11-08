@@ -12,9 +12,23 @@ spring:
     # No default: a missing password must fail startup, not fall back to a known credential.
     password: ${DATABASE_PASSWORD}
 
+  # Two roles (D-11). Flyway migrates as the schema owner, with no defaults: a missing owner must fail
+  # startup. The service connects as DATABASE_USERNAME, which owns nothing; the migrations grant it its
+  # rights through the placeholder service_role, set from the service's connection in
+  # RiskDatabaseConfiguration. Under @ServiceConnection the container supplies Flyway's credentials.
   flyway:
     enabled: true
     locations: classpath:db/migration
+    user: ${FLYWAY_USERNAME}
+    password: ${FLYWAY_PASSWORD}
+
+  # Spring Boot 4 reads the error settings here; server.error.* is no longer bound. The answer itself
+  # comes from ContainerErrorResource, which never includes any of these (R-08): this is a second guard.
+  web:
+    error:
+      include-message: never
+      include-stacktrace: never
+      include-path: never
 
 app:
   outbox:
@@ -30,8 +44,3 @@ app:
 logging:
   level:
     org.springframework.jdbc.core: INFO
-
-server:
-  error:
-    include-message: never
-    include-stacktrace: never

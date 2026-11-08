@@ -4,7 +4,7 @@ import com.gs5.kycaml.risk.domain.ComplianceRiskView;
 import com.gs5.kycaml.risk.domain.FrontOfficeStatus;
 import com.gs5.kycaml.risk.domain.RiskTrack;
 import com.gs5.kycaml.shared.kernel.Result;
-import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.TransactionDefinition;
@@ -44,6 +44,11 @@ public class ViewProjector {
     /**
      * Success is true when the views were written and false when the version gate ignored the
      * projection because the views are already at that version or later (idempotence).
+     *
+     * <p>Only a failure that belongs to the event itself is a {@link ProjectionFailure}: a view the
+     * database refuses ({@link DataIntegrityViolationException}) or a view that cannot be read. Any
+     * other database failure, a deadlock or a lock or query timeout above all, says nothing about the
+     * event, so it propagates and the relay releases the chunk without counting an attempt (R-13).
      */
     public Result<Boolean, ProjectionFailure> project(Projection projection) {
         try {
@@ -54,7 +59,7 @@ public class ViewProjector {
             return Optional.ofNullable(transaction.execute(unused -> write(projection, status)))
                     .map(Result::<Boolean, ProjectionFailure>success)
                     .orElseGet(() -> Result.failure(new ProjectionFailure()));
-        } catch (JacksonException | DataAccessException unwritable) {
+        } catch (JacksonException | DataIntegrityViolationException theEventsOwnFault) {
             return Result.failure(new ProjectionFailure());
         }
     }

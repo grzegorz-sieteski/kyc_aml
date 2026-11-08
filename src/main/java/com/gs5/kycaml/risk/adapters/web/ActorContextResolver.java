@@ -3,6 +3,7 @@ package com.gs5.kycaml.risk.adapters.web;
 import module java.base;
 
 import com.gs5.kycaml.risk.adapters.access.AuthenticatedCaller;
+import com.gs5.kycaml.risk.domain.BookingCentres;
 import org.springframework.stereotype.Component;
 
 /**
@@ -38,5 +39,15 @@ class ActorContextResolver {
     /** The caller, when an identity source can name one. Empty is the configured answer today. */
     Optional<AuthenticatedCaller> resolve() {
         return Optional.empty();
+    }
+
+    /**
+     * The identified caller, the only answer the resources use (design addendum A step 1): the
+     * identity source's caller, kept only when its booking centre has a jurisdiction configured. A
+     * caller of any other booking centre is not identified (BR-01, R-05), on every route and before
+     * any input is looked at. Final, so no identity source can skip the booking-centre check.
+     */
+    final Optional<AuthenticatedCaller> identify(BookingCentres bookingCentres) {
+        return resolve().filter(caller -> bookingCentres.jurisdictionOf(caller.actor().tenantId()).isPresent());
     }
 }

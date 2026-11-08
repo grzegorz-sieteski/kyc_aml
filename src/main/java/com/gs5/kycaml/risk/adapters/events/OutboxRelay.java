@@ -29,10 +29,12 @@ import java.util.stream.IntStream;
  * most {@code connectionBudget} chunks, and each chunk is projected and marked delivered in one short
  * transaction on one connection, never waiting for a second.
  *
- * <p>A chunk that cannot run for a reason that is not the event's own (the pool timed out, the commit
- * failed) rolls back, counts nothing and gives its rows back at once. A row whose own projection fails
- * counts an attempt, keeps its lease as a pause, and stops being claimed after {@value #MAX_ATTEMPTS}
- * attempts. A relay that dies leaves leases that run out; nothing is lost.
+ * <p>A chunk that cannot run for a reason that is not the event's own (the pool timed out, a lock or
+ * query timed out, a deadlock, the commit failed) rolls back, counts nothing and gives its rows back
+ * at once. A row whose own projection fails counts an attempt, keeps its lease as a pause, and stops
+ * being claimed after {@value #MAX_ATTEMPTS} attempts. A relay that dies leaves leases that run out;
+ * nothing is lost. A relay only ever marks or counts rows it still holds, so a relay whose lease was
+ * taken over changes nothing on them.
  */
 public class OutboxRelay {
 
@@ -141,24 +143,34 @@ public class OutboxRelay {
         for (var row : chunk) {
             (projector.project(row.projection()).isSuccess() ? delivered : failed).add(row.eventId());
         }
-        markDelivered(delivered);
         countAttempt(failed);
-        return delivered.size();
+        return markDelivered(delivered);
     }
 
-    private void markDelivered(List<UUID> eventIds) {
-        if (!eventIds.isEmpty()) {
-            jdbc.sql("UPDATE command.outbox SET status = 'DELIVERED', delivered_at = :now WHERE event_id IN (:ids)")
-                    .param("now", OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))
-                    .param("ids", eventIds)
-                    .update();
+    /**
+     * Marks delivered only the rows this relay still holds (R-14): a relay whose lease ran out and was
+     * taken over changes nothing. Returns how many rows it marked.
+     */
+    private int markDelivered(List<UUID> eventIds) {
+        if (eventIds.isEmpty()) {
+            return 0;
         }
+        return jdbc.sql("""
+                        UPDATE command.outbox SET status = 'DELIVERED', delivered_at = :now
+                         WHERE event_id IN (:ids) AND locked_by = :owner
+                        """)
+                .param("now", OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))
+                .param("ids", eventIds)
+                .param("owner", owner)
+                .update();
     }
 
+    /** Counts an attempt only on the rows this relay still holds (R-14), so no row is counted twice. */
     private void countAttempt(List<UUID> eventIds) {
         if (!eventIds.isEmpty()) {
-            jdbc.sql("UPDATE command.outbox SET attempts = attempts + 1 WHERE event_id IN (:ids)")
+            jdbc.sql("UPDATE command.outbox SET attempts = attempts + 1 WHERE event_id IN (:ids) AND locked_by = :owner")
                     .param("ids", eventIds)
+                    .param("owner", owner)
                     .update();
         }
     }
