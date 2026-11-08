@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 6 · Status: CHANGES REQUIRED (stage 5 and both stage 6 reviews rejected; back to stage 3 per AGENTS.md)
+Stage: 4 · Status: IN_PROGRESS (stage 3 RED for R-01 to R-20 done; developer next)
 Updated: 2026-11-08
 
 ## Source
@@ -187,3 +187,26 @@ no password default, no actuator, stack traces off.
 Unconfirmed, carried for later: format characters and lone surrogates in text (stage 5 saw them accepted;
 storage not checked); framework DEBUG logging would print the raw body; a lease overrun that holds view
 row locks; parked rows never reported; no test boots the real fail-closed resolver.
+
+## Stage 3 (second round): failing tests for R-01 to R-20 (2026-11-08)
+
+Spec D-08 to D-12 and the design addendum of 2026-11-08 come first (commit `66a9642`). Then, in
+`src/test/` only:
+
+| R | Test |
+|---|---|
+| R-01, R-02, R-06, R-07, R-08, R-10, R-18, R-03 | `RiskApiHardeningIT` (real Tomcat and PostgreSQL): byte-exact limits, chunked bodies, 401 before the body, strict JSON, field-level refusals, the four new problem types, `Cache-Control`, container errors |
+| R-05 | `RiskApiFlowIT.shouldRefuseABookingCentreWithoutAJurisdiction` corrected to 401 on all four routes; the BOLA test now uses a second configured centre (US) |
+| R-09, R-17 | `DatabaseRolesIT`: owner migrates, the service role owns nothing, has no UPDATE/DELETE/TRUNCATE on history, can still evaluate, decide and project; TRUNCATE refused even for the owner |
+| R-11 | `ConfidentialToStringTest` |
+| R-12 | `NullMarkedPackagesTest` |
+| R-13 | `OutboxTransientFailureIT` (a real lock timeout) |
+| R-14 | `OutboxLeaseOwnershipIT` |
+| R-15 | six `Outbox*Test` renamed to `*IT` |
+| R-16 | `QueryUseCasesTest:97` expects the en dash |
+| R-20 | `RiskProfileLogIT` |
+
+Gate: `check-write-lock.sh red` OK (test-compile passes, `test` fails). `./mvnw verify`: Surefire 312
+run, 5 failures (all new); Failsafe 150 run, 63 failures and 1 error, every one a new or stage 5 test
+failing for the reason it names. Seven new cases pass already by design (order guards: 401 before the
+body, role before size, D-08).

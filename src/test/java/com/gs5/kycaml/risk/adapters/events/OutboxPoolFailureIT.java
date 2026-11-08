@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Behaviour 4: a connection-pool failure (acquire timeout) is not an attempt. Only a projection failure of
  * the event itself counts toward the poison threshold of ten.
  */
-class OutboxPoolFailureTest extends RelaySupport {
+class OutboxPoolFailureIT extends RelaySupport {
 
     @Test
     @DisplayName("a healthy row never reaches ten attempts because the pool keeps timing out")

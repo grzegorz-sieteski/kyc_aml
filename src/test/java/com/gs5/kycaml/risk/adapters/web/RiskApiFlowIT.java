@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(properties = {
         "app.booking-centres.0de00000-0000-0000-0000-00000000000d=DE",
+        "app.booking-centres.05a00000-0000-0000-0000-0000000000a5=US",
         "app.outbox.relay.poll-interval=PT1H"})
 @AutoConfigureMockMvc
 @Testcontainers
@@ -48,6 +49,8 @@ class RiskApiFlowIT {
 
     private static final String DE_CENTRE = "0de00000-0000-0000-0000-00000000000d";
     private static final String OTHER_CENTRE = "05000000-0000-0000-0000-000000000005";
+    /** A second booking centre in scope: its callers are identified, and see none of Germany's customers. */
+    private static final String US_CENTRE = "05a00000-0000-0000-0000-0000000000a5";
     private static final String CUSTOMER = "C-SECRET-123";
     private static final String REASON = "Analyst reviewed the alert and the documents";
 
@@ -251,7 +254,7 @@ class RiskApiFlowIT {
     // ------------------------------------------------------------------ input and absence
 
     @Test
-    @DisplayName("input that cannot be scored is a 400, and an unreadable body counts as no input")
+    @DisplayName("input that cannot be scored is a 400, and so is a body that is not readable")
     void shouldRefuseBadInput() throws Exception {
         callAs(ActorRole.ONBOARDING_SYSTEM);
 
@@ -275,22 +278,30 @@ class RiskApiFlowIT {
         view("C-UNKNOWN").andExpect(status().isNotFound());
         decide("C-UNKNOWN", "ESCALATE_EDD", 1).andExpect(status().isNotFound());
 
-        callAs(ActorRole.AML_ANALYST_L2, OTHER_CENTRE);
+        callAs(ActorRole.AML_ANALYST_L2, US_CENTRE);
         view("C-HOME").andExpect(status().isNotFound());
         decide("C-HOME", "ESCALATE_EDD", 1).andExpect(status().isNotFound());
 
-        callAs(ActorRole.FRONT_OFFICE, OTHER_CENTRE);
+        callAs(ActorRole.FRONT_OFFICE, US_CENTRE);
         frontOffice("C-HOME").andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("a booking centre without a configured jurisdiction cannot evaluate (422)")
+    @DisplayName("a caller of a booking centre not in scope is not identified: 401 on every route, before any input (BR-01, R-05)")
     void shouldRefuseABookingCentreWithoutAJurisdiction() throws Exception {
         callAs(ActorRole.ONBOARDING_SYSTEM, OTHER_CENTRE);
-
         evaluate("C-ELSEWHERE", EXPOSED_CUSTOMER)
-                .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.type").value("urn:problem-type:risk:booking-centre-unknown"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.type").value("urn:problem-type:risk:caller-not-identified"));
+        evaluate("C-ELSEWHERE", "{\"profileClass\":\"NOT_A_CLASS\"}")
+                .andExpect(status().isUnauthorized());
+
+        callAs(ActorRole.AML_ANALYST_L2, OTHER_CENTRE);
+        view("C-ELSEWHERE").andExpect(status().isUnauthorized());
+        decide("C-ELSEWHERE", "ESCALATE_EDD", 1).andExpect(status().isUnauthorized());
+
+        callAs(ActorRole.FRONT_OFFICE, OTHER_CENTRE);
+        frontOffice("C-ELSEWHERE").andExpect(status().isUnauthorized());
     }
 
     @Test

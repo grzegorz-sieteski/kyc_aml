@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ({@code UPDATE ... WHERE event_id IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING}); a row with an
  * unexpired lease belongs to its owner, a row with an expired lease is up for grabs again.
  */
-class OutboxLeaseClaimTest extends RelaySupport {
+class OutboxLeaseClaimIT extends RelaySupport {
 
     @Test
     @DisplayName("migration V3 adds a nullable locked_until (timestamptz) and locked_by (uuid) to the outbox")

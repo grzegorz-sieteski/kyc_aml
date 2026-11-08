@@ -19,7 +19,7 @@ import static org.awaitility.Awaitility.await;
  * and no event is lost when a relay is cut off between claim and mark (the other takes the rows once the
  * lease has expired).
  */
-class OutboxConcurrentRelaysTest extends RelaySupport {
+class OutboxConcurrentRelaysIT extends RelaySupport {
 
     @Test
     @DisplayName("two relays running at once deliver every event exactly once, and project no row twice")
@@ -69,7 +69,7 @@ class OutboxConcurrentRelaysTest extends RelaySupport {
         var release = new CountDownLatch(1);
         held.before = () -> {
             started.countDown();
-            OutboxLeaseClaimTest.await(release);
+            OutboxLeaseClaimIT.await(release);
         };
         var other = new Rig();
         var otherProjector = other.projector();
@@ -108,7 +108,7 @@ class OutboxConcurrentRelaysTest extends RelaySupport {
         var started = new CountDownLatch(1);
         stuck.before = () -> {
             started.countDown();
-            OutboxLeaseClaimTest.await(never);                    // A is "cut off": it never marks anything
+            OutboxLeaseClaimIT.await(never);                    // A is "cut off": it never marks anything
         };
         var rescuer = new Rig();
         var rescuerProjector = rescuer.projector();
