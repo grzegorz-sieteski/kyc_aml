@@ -313,3 +313,135 @@ Transaction monitoring, screening, policy editing, maker-checker, retention, Rea
 
 Design written to `docs/adr/customer-risk-scoring-design.md`. Next: `@test-designer` turns it into
 contracts and failing tests.
+
+---
+
+## Addendum 2026-11-07: relay connection pressure (state board, open design question)
+
+Status: **candidate 2b confirmed by the product owner on 2026-11-08. No change to `src/main/` has been made yet;
+it follows through stage 3 (failing tests) and stage 4.**
+Evidence: the spike `src/test/java/com/gs5/kycaml/risk/adapters/RelayPressureSpike.java` (not a `*Test` or
+`*IT`, so no Maven gate runs it; run it with `./mvnw -B test -Dtest=RelayPressureSpike`, about 6 minutes,
+needs Docker). It runs the real migrations, the real `ViewProjector` and the real `OutboxRelay` (as
+baseline) on PostgreSQL 17, through Hikari pools of 10 and of 3 connections.
+
+### Problem, as measured on the shipped relay
+
+`OutboxRelay.runOnce` holds its claim connection and the row locks for the whole batch while up to 16
+workers each wait for a second connection. Measured on the shipped relay:
+
+- Idle pool of 10: the relay takes **all 10 connections** (peak 10); the longest single connection hold is
+  about 200 ms.
+- With request traffic on the same pool the longest hold is **0.8–1.4 s** (pool 10) and **1.4–2.0 s** (pool 3).
+- Pool-acquire timeouts of workers are **counted as failed attempts**: on a pool of 3 under load the
+  baseline burnt **452–595 attempts in 12 s and one row reached `attempts = 10`**, i.e. it was parked and
+  no longer claimed, although nothing was wrong with the event. This is a defect in its own right: a
+  pool timeout must never count toward the poison threshold.
+
+### How it was measured (and what it does not show)
+
+Every candidate gets the same connection budget B = max(2, pool/2) (5 on a pool of 10, 2 on a pool of 3);
+the baseline keeps its 1 + 16. Backlog: 2 000 events idle, 20 000 events for a fixed 12 s window under
+load. Load: 2 × pool request threads, each writing a real profile through the real use case and keeping
+its connection 10 ms more. Hikari connection timeout 250 ms (the minimum; the production default is 30 s).
+Loaded rows were run twice; the two runs differ by up to a factor of two, so read the ranges, not the
+digits. **Limits:** one developer machine with Docker on Windows; synthetic closed-loop load that keeps
+the pool saturated, which is harsher than the expected onboarding traffic; one view JSON reused for all
+seeded events; a "crash" is the server terminating A's connections and A's pool shutting down, not a
+killed JVM; the lease is 3 s in the spike.
+
+### Results
+
+Idle backlog of 2 000 events (events per second, longest single connection hold):
+
+| Candidate | pool 10 | pool 3 |
+|---|---|---|
+| 0 shipped | 880–1 100 ev/s, 200–250 ms, **peak 10 conns** | 800 ev/s, 170 ms |
+| 1 bounded workers | 840–1 050 ev/s, 170–250 ms | **500 ev/s**, 210 ms |
+| 2 lease, per-event projection | 1 000–1 260 ev/s, **13 ms** | 840–870 ev/s, 13 ms |
+| 2b lease, one transaction per chunk | 1 030 ev/s, 73 ms | 720 ev/s, 139 ms |
+| 3 partitioned claimers | 1 200–1 400 ev/s, 310–390 ms | 770–790 ev/s, 255–285 ms |
+
+Same pool, request traffic on it, fixed 12 s window. Requests with no relay at all (`alone`) managed
+522 req/s on a pool of 10 and 180 req/s on a pool of 3.
+
+| Candidate | pool 10 relay | pool 10 requests | pool 3 relay | pool 3 requests | attempts burnt for nothing |
+|---|---|---|---|---|---|
+| 0 shipped | 107–166 ev/s | 500–512/s | 45–48 ev/s | 125/s | up to 595 (**one row parked**) |
+| 1 bounded workers | 43–51 ev/s | 496–514/s | **4 ev/s**, claim held **15–17 s** | 125/s | 19–36 |
+| 2 lease, per-event | 30–68 ev/s | 543–568/s | 13–23 ev/s | 178–188/s | 10–85 |
+| **2b lease, chunk per transaction** | **420–443 ev/s** | **549–565/s**, p99 109–113 ms | **291–316 ev/s** | 147–150/s | **0** |
+| 3 partitioned claimers | 797–883 ev/s | **403–428/s**, p99 167–200 ms, up to 16 failed | 341–423 ev/s | 122–123/s | 0 |
+| 4 projection in the write transaction | n/a (no backlog) | **403/s** (−23 %), p99 254 ms, 45 failed | n/a | **118/s** (−35 %) | n/a |
+
+Two relays at once (pool 10 each, 2 000 events): every candidate delivered every event; 0, 1, 2 and 3
+recorded 1–10 harmless "gated" projections (a stale version arrived after a newer one and the version
+gate ignored it); 2b recorded none.
+
+Crash between claim and mark (A cut off while projecting, B takes over; 200 events): **no candidate lost
+an event**. 0, 1 and 3 hand everything to B at once (the claim transaction rolls back; 0.6–0.7 s to
+drain). 2 and 2b leave A's rows leased until the lease expires (3.1 s with a 3 s lease), then B takes
+them. Candidate 4 is all-or-nothing: after a crash before commit there was no profile, no outbox row and
+no view row for the customer.
+
+One row that fails inside the database in the middle of a healthy batch (a CHECK added by the spike):
+0, 1, 2, 2b and 3 delivered all healthy rows and kept the bad row `PENDING` with its attempts counted.
+**Candidate 3 is only safe if the projector runs in a savepoint** (`PROPAGATION_NESTED`). With the
+shipped projector joined to the claim transaction, PostgreSQL aborts the transaction, the following
+statements fail, the whole batch rolls back, **no attempt is ever counted** and the claimer repeats the
+same failing batch forever (5 exceptions in 5 rounds; in two of three runs 2–4 healthy rows of 20 stayed
+undelivered). Candidate 4 rejects the command that carries the bad projection (accepted: false, nothing
+left behind).
+
+### Verdict per candidate
+
+1. **Bounded workers: reject.** Fewer workers keep the same long claim transaction open for longer. It is
+   worse than the baseline in every loaded measurement (claim held 15–17 s on a pool of 3, 4 ev/s).
+2. **Lease with per-event projection: reject as specified.** It holds no connection while waiting
+   (longest hold 13–64 ms) but every event re-queues for the pool, so under saturation it delivered
+   13–68 ev/s. The idea is right, the granularity is wrong; see 2b.
+3. **2b, lease and a chunk per transaction: recommended.** The lease is claimed in one short transaction;
+   the claimed batch is split by profile (one profile stays in version order) into at most B chunks;
+   each worker projects its chunk and marks it delivered in **one** short transaction on **one**
+   connection, never waiting for a second. Under load it kept request throughput at the level of requests
+   alone (549–565/s against 522/s), burnt no attempts, and delivered 420–443 ev/s on a pool of 10 and
+   291–316 ev/s on a pool of 3, with the longest connection hold 90–255 ms. A pool timeout rolls the
+   chunk back and counts nothing; the lease expires and the rows return.
+4. **Partitioned claimers (candidate 3): runner-up.** Highest relay throughput under load (800–880 ev/s)
+   but it keeps B connections busy for the whole batch, which cost requests about 20 % of their
+   throughput plus some failures, it rolls back a whole batch on a pool timeout, and it is unsafe
+   without savepoints (above). Choose it only if the relay must keep up with a sustained rate that 2b
+   cannot deliver on a saturated pool.
+5. **Projection in the write transaction (candidate 4): reject for this increment.** It removes the
+   backlog, but costs 23–35 % of request throughput and raises p99, makes the command fail when a view
+   cannot be written, puts the query schema into the command transaction (the projector is meant to be
+   the only writer of `query`), and abandons the outbox decision of §8 (H-06). Revisit only if the
+   product owner needs the view strongly consistent with the command, which the specification does not
+   ask for.
+
+### Recommendation (to apply at stage 3/4 after confirmation)
+
+Adopt **2b**, with these conditions the spike made visible:
+
+- `V3__outbox_lease.sql`: `ALTER TABLE command.outbox ADD COLUMN locked_until TIMESTAMPTZ, ADD COLUMN locked_by UUID`.
+  Claim: one `UPDATE … WHERE event_id IN (SELECT … AND (locked_until IS NULL OR locked_until < now())
+  ORDER BY created_at, aggregate_version LIMIT :batch FOR UPDATE SKIP LOCKED) RETURNING …`, in its own
+  short transaction.
+- A connection-pool failure is **not an attempt**. Only a projection failure of the event itself counts
+  toward `MAX_ATTEMPTS` (10). The shipped relay violates this and parks healthy rows under load.
+- `ViewProjector` must run in a **savepoint** (`PROPAGATION_NESTED`) so that one row that fails in the
+  database does not abort the chunk. The spike's 2b and 3 used one; the shipped projector does not.
+- The connection budget B (default max(2, pool/2)) and the lease duration are configuration. The lease
+  must be much longer than the slowest chunk (a few hundred ms measured), e.g. 30 s, which is also the
+  worst-case delay after a crash. A lease that expires mid-chunk is harmless (the version gate ignores
+  the repeat) but wasteful.
+- On a chunk failure release the lease at once (the spike let it expire).
+- The architecture rules of §11 are unaffected: the relay stays in `adapters/events/` and the projector
+  remains the only writer of `query`.
+
+### What remains unproven
+
+The numbers come from one saturating synthetic load on one machine. Before stage 4 fixes a batch size,
+lease and budget, repeat the spike with the production pool size and a realistic request mix. It shows
+the shape, that 2b avoids the pathologies and that 1 and 4 should not be chosen; it does not size the
+configuration.
