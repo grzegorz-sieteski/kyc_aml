@@ -1,7 +1,7 @@
 # customer-risk-scoring
 
-Stage: 3 · Status: IN_PROGRESS (design confirmed by the product owner 2026-11-07)
-Updated: 2026-11-07
+Stage: 5 · Status: CHANGES REQUIRED (stage 5 found four defects; back to stage 3 per AGENTS.md)
+Updated: 2026-11-08
 
 ## Source
 
@@ -23,9 +23,9 @@ interface yet; ARGON's numbers are not confirmed and appear as assumptions.
 | 0 | bootstrap | build, shared kernel, gates | `./mvnw -B verify`: 0 Checkstyle violations, 75 tests, BUILD SUCCESS. Gates broken on purpose once: a `throw new` in the kernel failed Checkstyle (`noThrowNew`); a kernel `*Helper` depending on Spring failed `shared_kernel_stays_pure_java` and `no_grab_bag_classes`. Probes removed | commit `a5edac7` |
 | 1 | `@business-analyst` | `docs/specs/customer-risk-scoring-spec.md` | **Passed**: A-01 to A-31 confirmed by the product owner (D-07); booking centres US, GB, DE (D-06); `grep -c 'NOT CONFIRMED'` → 0 | 2026-11-07 |
 | 2 | `@architect` | `docs/adr/customer-risk-scoring-design.md` | **Written**: covers both commands and both queries; H-01 to H-08 resolved in the design |  2026-11-07 |
-| 3 | `@test-designer` | contracts and failing tests | not started | — |
-| 4 | `@developer` | production code | not started | — |
-| 5 | `@qa-explorer` | `requests/customer-risk-scoring.http` | not started | — |
+| 3 | `@test-designer` | contracts and failing tests | **Done** for the domain (RED proved); web edge written with its tests and proved by mutation | commit `d87f0fd` |
+| 4 | `@developer` | production code | **Done**: `./mvnw -B verify` 332 unit, 37 IT green (re-run 2026-11-08 on JDK 25.0.4, PostgreSQL 17) | commit `894c0a8` |
+| 5 | `@qa-explorer` | `requests/customer-risk-scoring-exploratory.http`, `RiskApiAdversarialIT` | **[REJECTED]**: QA-01 to QA-04, 14 failing cases; 17 guard cases pass; `check-write-lock.sh qa` OK | 2026-11-08 |
 | 6 | `@code-reviewer` + `@sec-reviewer` | review reports | not started | — |
 
 ## Carried to stage 2: where ARGON and this harness disagree
@@ -58,12 +58,9 @@ None. Known gaps: no identity source (every call is 401 until one is chosen), no
 
 ## Next
 
-Open a new chat and call the architect:
-
-> `@architect` design mode. Write `docs/adr/customer-risk-scoring-design.md` from
-> `docs/specs/customer-risk-scoring-spec.md`, following the `spec-to-plan` skill. Resolve H-01 to
-> H-08 in `docs/workflow/customer-risk-scoring-state.md` explicitly, and cover both commands and both
-> queries.
+Stage 6 (code and security review, read-only) runs on the current state; its findings join QA-01 to
+QA-04. Then back to stage 3: the failing tests for QA-01 to QA-04 already exist in
+`RiskApiAdversarialIT`, so `@developer` fixes `src/main/` until they pass, with `src/test/` frozen.
 
 ## Status (2026-11-07)
 
@@ -112,3 +109,39 @@ integration tests green. One test (`OutboxConcurrentRelaysTest.shouldLetTheOther
 was wrong, not the code: it compared with calls the blocked holder had not yet recorded, and was changed to
 ask the database which rows are held. Not done: the spike was not re-run with the production pool size and a
 realistic request mix, which the ADR asks before the batch size, lease and budget are final.
+
+## Stage 5 report: `@qa-explorer` (2026-11-08)
+
+Real Tomcat on a random port and a real PostgreSQL 17 (`RiskApiAdversarialIT`, `java.net.http`, no
+MockMvc, so the container's own path handling and error dispatch are in play). `src/main/` untouched.
+
+Verdict: **[REJECTED]**.
+
+| ID | Severity | What was done | Expected | Actual | Failing test |
+|---|---|---|---|---|---|
+| QA-01 | Medium | L2 freezes with `"versionViewed": 1.9` and with `"versionViewed": "1"` | Refused, nothing recorded: the person viewed no version 1.9 (BR-33) | 200; the decision is recorded as taken on version 1. Jackson coerces float and string to `Long` | `shouldNotRecordADecisionOnAVersionThatIsNotAWholeNumber` (2 cases) |
+| QA-02 | Medium | Evaluate with `"sanctionsMatch": 0`, `1`, `2`, `"false"`; `"terroristLink": 0`; `"forgedIdentity": "false"`; `"highRiskProductRequest": 0` | Refused: each is yes or no (BR-10, BR-12). An upstream sending a match score or a flag as a number must not be read as "no sanctions match" | 200; numbers and strings are coerced to `Boolean`. `0` and `"false"` become "no critical fact" | `shouldRefuseAYesOrNoAnswerThatIsNotABoolean` (7 cases) |
+| QA-03 | Medium | Evaluate `POST /api/risk-profiles/C-1;x/evaluations` | `C-1` untouched: the number is compared exactly as supplied (BR-06), or the request is refused | 200 on customer `C-1`, whose profile moves to version 2. Spring strips `;x` as a matrix parameter. Encoded `%3B` is kept correctly | `shouldNotTruncateACustomerNumberAtASemicolon` |
+| QA-04 | Low | `DELETE` / `PUT` on a profile, `GET .../evaluations`, an unmapped sub-path | A 4xx that does not repeat the customer number (design section 10, which already pins `instance` for that reason) | Spring Boot's default error body: `{"status":405,...,"path":"/api/risk-profiles/C-SECRET"}`, not `problem+json` | `shouldNotEchoTheCustomerNumberFromTheContainerErrorPath` (4 cases) |
+
+QA-01 and QA-02 share a root cause (lenient scalar coercion in the `JsonMapper` the resources read
+bodies with), but they are separate findings: each needs its own guard.
+
+**Held under attack (guard tests, passing):** 24 concurrent freezes on one version, exactly one
+recorded and every other 409; 24 concurrent first evaluations of one new number, one profile, one
+history row per success and no 5xx; customer number 64 emoji accepted and 65 too long (code points);
+encoded LF, CR, DEL and NEL refused as control characters; encoded NUL, `/`, `\`, invalid UTF-8 and a
+CESU surrogate refused by Tomcat with a 400 that names no server or version; justification 19 emoji too
+short and 20 accepted, 2 000 accepted and 2 001 too long, CR LF accepted and a lone CR refused; JSON
+nested 5 000 deep read as no input; a `tenantId` smuggled into the body ignored.
+
+**Tried, not defects, for the product owner or the architect to decide:**
+- No request size limit: a 5 MB body and 1 000 citizenships were accepted and scored. Not in the spec.
+- A justification of 25 spaces is accepted (BR-34 counts characters, not visible ones).
+- Format characters (U+202E right-to-left override, U+2028 line separator) and a lone surrogate
+  (`\ud800`) are accepted in a justification; BR-34 bans control characters only (Unicode `Cc`).
+- `..` is accepted as a customer number (BR-06 allows it).
+- Paths Tomcat refuses answer `text/html`, not `problem+json`; nothing is disclosed.
+- `GET /error` answers 500 with status 999 (Spring Boot default).
+- A duplicate `"kind"` key: the last one wins for both the permission check and the command, so the role
+  check is not bypassed (an L1 sending `FREEZE_ASSETS` then `ESCALATE_EDD` escalates, which L1 may do).
