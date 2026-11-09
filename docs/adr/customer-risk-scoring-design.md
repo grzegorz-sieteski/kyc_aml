@@ -623,3 +623,9 @@ recorded: never enable `spring.mvc.log-request-details` with DEBUG on `org.sprin
   remove every key that Flyway could read as `service_role`: equal ignoring case, or lower-casing to
   `service_role` in the root locale or the default locale. With a valid user, the service's own name is
   then the only such entry.
+- **R-32 (security check of R-31, SR-32).** Cleaning the placeholder map is not enough while the
+  placeholder syntax stays configurable: a suffix of `_role}` makes Flyway read `${service_role}` in V5 as
+  the name `service`. The customizer also pins `placeholderPrefix("${")`, `placeholderSuffix("}")` and
+  `placeholderReplacement(true)`, whatever the configuration says and whether or not the user is accepted.
+  With replacement off, V5 would fail on a role literally named `${service_role}` (SR-33, fails closed);
+  pinning it on removes that path too.

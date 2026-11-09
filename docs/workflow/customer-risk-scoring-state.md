@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 4 · Status: IN_PROGRESS (security check of R-30 found R-31; RED done, developer next)
+Stage: 4 · Status: IN_PROGRESS (R-31 fixed in `a0fca7f`; its security check found R-32; RED done, developer next)
 Updated: 2026-11-08
 
 ## Source
@@ -316,3 +316,10 @@ Flyway matches placeholder names ignoring case; the R-30 removal did not. A pres
 would survive and reach V5's GRANT. Needs control of the configuration, but the effect is permanent.
 Stage 3: `RiskDatabaseConfigurationTest` gains 6 failing cases (case variants, including a Turkish
 dotted capital I; and a valid user leaving only its own name).
+
+## R-31 fixed; security check of it: [CHANGES REQUIRED], R-32 (2026-11-09)
+
+`a0fca7f`: every case variant of `service_role` removed. Orchestrator's GREEN gate: src/test and docs
+untouched; Surefire 341, Failsafe 159, 0 failures; BUILD SUCCESS. The check confirmed the key removal is
+complete, then found that a configured placeholder suffix makes V5 read another name (R-32). Stage 3:
+two failing cases in `RiskDatabaseConfigurationTest` pin prefix, suffix and replacement.

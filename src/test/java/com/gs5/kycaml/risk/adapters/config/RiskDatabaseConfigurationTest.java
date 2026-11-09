@@ -109,4 +109,30 @@ class RiskDatabaseConfigurationTest {
                 .filteredOn(entry -> entry.getKey().equalsIgnoreCase(RiskDatabaseConfiguration.SERVICE_ROLE_PLACEHOLDER))
                 .extracting(java.util.Map.Entry::getValue).containsExactly("kyc_service");
     }
+
+    @org.junit.jupiter.api.Test
+    @DisplayName("R-32: a changed placeholder suffix cannot make V5 read ${service_role} as another, unremoved name")
+    void shouldPinThePlaceholderSyntax() {
+        var configuration = Flyway.configure().placeholderPrefix("${service_").placeholderSuffix("_role}")
+                .placeholderReplacement(false)
+                .placeholders(java.util.Map.of("service", "public", "role", "public"));
+
+        placeholderFor("kyc_service", configuration);
+
+        assertThat(configuration.getPlaceholderPrefix()).isEqualTo("${");
+        assertThat(configuration.getPlaceholderSuffix()).isEqualTo("}");
+        assertThat(configuration.isPlaceholderReplacement()).isTrue();
+        assertThat(configuration.getPlaceholders()).containsEntry("service_role", "kyc_service");
+    }
+
+    @org.junit.jupiter.api.Test
+    @DisplayName("R-32: the syntax is pinned even when the user is refused, so V5 can only fail on the missing name")
+    void shouldPinThePlaceholderSyntaxForARefusedUser() {
+        var configuration = Flyway.configure().placeholderSuffix("_role}");
+
+        placeholderFor("public", configuration);
+
+        assertThat(configuration.getPlaceholderSuffix()).isEqualTo("}");
+        assertThat(configuration.getPlaceholders().keySet()).noneMatch(key -> key.equalsIgnoreCase("service_role"));
+    }
 }
