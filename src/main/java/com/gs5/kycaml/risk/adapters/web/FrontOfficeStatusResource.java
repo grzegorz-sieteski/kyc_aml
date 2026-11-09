@@ -3,16 +3,17 @@ package com.gs5.kycaml.risk.adapters.web;
 import com.gs5.kycaml.risk.adapters.access.AccessRefusal;
 import com.gs5.kycaml.risk.adapters.access.OperationGate;
 import com.gs5.kycaml.risk.adapters.access.RiskPermissions;
+import com.gs5.kycaml.risk.domain.BookingCentres;
 import com.gs5.kycaml.risk.domain.FrontOfficeStatusError;
 import com.gs5.kycaml.risk.domain.FrontOfficeStatusQuery;
 import com.gs5.kycaml.risk.domain.FrontOfficeStatusView;
 import com.gs5.kycaml.risk.domain.GetFrontOfficeStatusUseCase;
 import com.gs5.kycaml.shared.kernel.ActorContext;
 import com.gs5.kycaml.shared.kernel.Result;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,20 +29,23 @@ class FrontOfficeStatusResource {
 
     private final GetFrontOfficeStatusUseCase useCase;
     private final ActorContextResolver actorContextResolver;
+    private final BookingCentres bookingCentres;
     private final OperationGate<FrontOfficeStatusQuery, Result<FrontOfficeStatusView, FrontOfficeStatusError>> gate;
 
-    FrontOfficeStatusResource(GetFrontOfficeStatusUseCase useCase, ActorContextResolver actorContextResolver) {
+    FrontOfficeStatusResource(GetFrontOfficeStatusUseCase useCase, ActorContextResolver actorContextResolver,
+                              BookingCentres bookingCentres) {
         this.useCase = useCase;
         this.actorContextResolver = actorContextResolver;
+        this.bookingCentres = bookingCentres;
         this.gate = new OperationGate<>(RiskPermissions.FRONT_OFFICE_STATUS, this::askForActor);
     }
 
     @GetMapping("/{customerNumber}/front-office-status")
-    ResponseEntity<Object> status(@PathVariable String customerNumber) {
-        return gate.admit(actorContextResolver.resolve())
-                .fold(admission -> FrontOfficeStatusQuery.parse(customerNumber)
+    ResponseEntity<Object> status(HttpServletRequest request) {
+        return gate.admit(actorContextResolver.identify(bookingCentres))
+                .fold(admission -> FrontOfficeStatusQuery.parse(RawCustomerNumber.of(request))
                                 .fold(query -> admission.run(query)
-                                                .fold(ResponseEntity::<Object>ok,
+                                                .fold(ProblemResponses::ok,
                                                         error -> refused(new Refusal.Rejected(error))),
                                         error -> refused(new Refusal.Rejected(error))),
                         access -> refused(new Refusal.Access(access)));

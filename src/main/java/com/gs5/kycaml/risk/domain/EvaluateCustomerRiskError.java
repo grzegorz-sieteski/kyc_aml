@@ -22,6 +22,9 @@ public sealed interface EvaluateCustomerRiskError {
 
     record NoCitizenship() implements EvaluateCustomerRiskError { }
 
+    /** BR-08, D-10: more citizenships than {@link EvaluateCustomerRiskCommand#MAX_CITIZENSHIPS}. */
+    record TooManyCitizenships(int maxCount, int actualCount) implements EvaluateCustomerRiskError { }
+
     record GeographicClassInvalid(CountryField field) implements EvaluateCustomerRiskError { }
 
     record ChannelNotRecognised() implements EvaluateCustomerRiskError { }

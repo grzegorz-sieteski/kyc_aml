@@ -12,9 +12,36 @@ spring:
     # No default: a missing password must fail startup, not fall back to a known credential.
     password: ${DATABASE_PASSWORD}
 
+  # Two roles (D-11). Flyway migrates as the schema owner, with no defaults: a missing owner must fail
+  # startup. The service connects as DATABASE_USERNAME, which owns nothing; the migrations grant it its
+  # rights through the placeholder service_role, set from the service's connection in
+  # RiskDatabaseConfiguration. Under @ServiceConnection the container supplies Flyway's credentials.
   flyway:
     enabled: true
     locations: classpath:db/migration
+    user: ${FLYWAY_USERNAME}
+    password: ${FLYWAY_PASSWORD}
+
+  # No route accepts multipart (R-21). Without a MultipartResolver, DispatcherServlet parses no part
+  # before a handler runs, so an unidentified caller cannot make the service read and store a body.
+  servlet:
+    multipart:
+      enabled: false
+
+  # No FormContentFilter (R-22): it would read a whole PUT/PATCH/DELETE form body, unbounded, before
+  # dispatch and so before identification. No route accepts a form body.
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
+
+  # Spring Boot 4 reads the error settings here; server.error.* is no longer bound. The answer itself
+  # comes from ContainerErrorResource, which never includes any of these (R-08): this is a second guard.
+  web:
+    error:
+      include-message: never
+      include-stacktrace: never
+      include-path: never
 
 app:
   outbox:
@@ -30,8 +57,3 @@ app:
 logging:
   level:
     org.springframework.jdbc.core: INFO
-
-server:
-  error:
-    include-message: never
-    include-stacktrace: never

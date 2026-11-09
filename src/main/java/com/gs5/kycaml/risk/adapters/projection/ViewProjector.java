@@ -4,8 +4,11 @@ import com.gs5.kycaml.risk.domain.ComplianceRiskView;
 import com.gs5.kycaml.risk.domain.FrontOfficeStatus;
 import com.gs5.kycaml.risk.domain.RiskTrack;
 import com.gs5.kycaml.shared.kernel.Result;
-import org.springframework.dao.DataAccessException;
+import org.springframework.dao.NonTransientDataAccessException;
+import org.springframework.dao.RecoverableDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.init.ScriptException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -44,6 +47,22 @@ public class ViewProjector {
     /**
      * Success is true when the views were written and false when the version gate ignored the
      * projection because the views are already at that version or later (idempotence).
+     *
+     * <p>Three kinds of exception escape, and none of them says anything about the event, so the relay
+     * releases the chunk without counting an attempt (R-13): a {@link TransientDataAccessException} (a
+     * deadlock, a lock or query timeout); a {@link org.springframework.transaction.TransactionException}
+     * from the transaction itself (it could not begin, commit or roll back, for example because no
+     * connection could be obtained), which is not a {@code DataAccessException}; and any runtime
+     * exception that does not come from the database at all.
+     * Every other data-access failure is this event's {@link ProjectionFailure} and counts an attempt
+     * (R-23): a refused view, but also a persistent failure such as bad SQL or a lost grant, which would
+     * otherwise be retried forever without ever being counted or parked. So is a view that cannot be
+     * read.
+     *
+     * <p>The catch names every direct subclass of {@code DataAccessException} on the classpath except
+     * the transient one, because there is no {@code throw} in this codebase to rethrow that one from a
+     * catch-all. A subclass added by a later Spring release would escape like a transient failure; the
+     * relay logs every such release with the exception type, so it would not go unnoticed.
      */
     public Result<Boolean, ProjectionFailure> project(Projection projection) {
         try {
@@ -54,7 +73,8 @@ public class ViewProjector {
             return Optional.ofNullable(transaction.execute(unused -> write(projection, status)))
                     .map(Result::<Boolean, ProjectionFailure>success)
                     .orElseGet(() -> Result.failure(new ProjectionFailure()));
-        } catch (JacksonException | DataAccessException unwritable) {
+        } catch (JacksonException | NonTransientDataAccessException | RecoverableDataAccessException
+                 | ScriptException theEventsOwnFault) {
             return Result.failure(new ProjectionFailure());
         }
     }

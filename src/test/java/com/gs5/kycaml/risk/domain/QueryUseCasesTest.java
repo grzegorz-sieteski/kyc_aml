@@ -94,7 +94,7 @@ class QueryUseCasesTest {
         var result = useCase.ask(L1_IN_DE, new FrontOfficeStatusQuery(number("C-1")));
 
         assertThat(result).isEqualTo(Result.success(new FrontOfficeStatusView("C-1", FrontOfficeStatus.ACTIVE,
-                "Account active - no operational restrictions.")));
+                "Account active – no operational restrictions.")));
     }
 
     @Test

@@ -103,7 +103,8 @@ public abstract class RiskDatabaseSupport {
         source.setUrl(POSTGRES.getJdbcUrl().replaceFirst("/[^/?]+(\\?|$)", "/" + name + "$1"));
         source.setUser(POSTGRES.getUsername());
         source.setPassword(POSTGRES.getPassword());
-        Flyway.configure().dataSource(source).locations("classpath:db/migration").load().migrate();
+        Flyway.configure().dataSource(source).locations("classpath:db/migration")
+                .placeholders(java.util.Map.of("service_role", POSTGRES.getUsername())).load().migrate();
 
         dataSource = source;
         jdbc = JdbcClient.create(source);

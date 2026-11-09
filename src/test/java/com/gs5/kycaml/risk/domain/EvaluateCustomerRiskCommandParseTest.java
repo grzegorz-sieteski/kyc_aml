@@ -278,4 +278,34 @@ class EvaluateCustomerRiskCommandParseTest {
                 DE_LOW, "DE", "BRANCH", false, "NONE", null, null, null)))
                 .isEqualTo(failing(new EvaluateCustomerRiskError.CriticalFactMissing(CriticalFactField.SANCTIONS_MATCH)));
     }
+
+    private static RawEvaluateCustomerRisk withCitizenships(java.util.List<RawRatedCountry> citizenships) {
+        var raw = RiskFixtures.validRaw();
+        return new RawEvaluateCustomerRisk(raw.customerNumber(), raw.profileClass(), raw.residence(), citizenships,
+                raw.birth(), raw.loginCountry(), raw.channel(), raw.highRiskProductRequest(), raw.adverseMediaClass(),
+                raw.sanctionsMatch(), raw.terroristLink(), raw.forgedIdentity());
+    }
+
+    @Test
+    @DisplayName("R-27: 10 citizenships parse, 11 are TooManyCitizenships(10, 11) (D-10)")
+    void shouldRefuseMoreThanTenCitizenships() {
+        var de = RiskFixtures.rated("DE", "LOW");
+
+        assertThat(EvaluateCustomerRiskCommand.parse(withCitizenships(java.util.Collections.nCopies(10, de))).isSuccess())
+                .isTrue();
+        assertThat(EvaluateCustomerRiskCommand.parse(withCitizenships(java.util.Collections.nCopies(11, de))))
+                .isEqualTo(com.gs5.kycaml.shared.kernel.Result.failure(
+                        new EvaluateCustomerRiskError.TooManyCitizenships(10, 11)));
+    }
+
+    @Test
+    @DisplayName("R-27: an invalid citizenship country is refused before the count (catalogue rows 9, 11)")
+    void shouldJudgeTheCountryBeforeTheCount() {
+        var citizenships = new java.util.ArrayList<>(java.util.Collections.nCopies(10, RiskFixtures.rated("DE", "LOW")));
+        citizenships.add(RiskFixtures.rated("XX", "LOW"));
+
+        assertThat(EvaluateCustomerRiskCommand.parse(withCitizenships(citizenships)))
+                .isEqualTo(com.gs5.kycaml.shared.kernel.Result.failure(
+                        new EvaluateCustomerRiskError.CountryInvalid(CountryField.CITIZENSHIP)));
+    }
 }

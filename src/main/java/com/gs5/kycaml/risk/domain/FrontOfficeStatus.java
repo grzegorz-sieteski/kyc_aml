@@ -6,7 +6,7 @@ package com.gs5.kycaml.risk.domain;
  */
 public enum FrontOfficeStatus {
 
-    ACTIVE("Account active - no operational restrictions."),
+    ACTIVE("Account active – no operational restrictions."),
     VERIFICATION_PENDING("Standard administrative verification of documentation is in progress.");
 
     private final String message;

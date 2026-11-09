@@ -445,3 +445,197 @@ The numbers come from one saturating synthetic load on one machine. Before stage
 lease and budget, repeat the spike with the production pool size and a realistic request mix. It shows
 the shape, that 2b avoids the pathologies and that 1 and 4 should not be chosen; it does not size the
 configuration.
+
+---
+
+## Addendum 2026-11-08: stage 6 fixes (R-01 to R-20, decisions D-08 to D-12)
+
+Source: the consolidated stage 5 and stage 6 list on the state board, and the product owner's
+decisions D-08 to D-12 in the specification. This addendum replaces §10's description of how a body
+is read, and adds to §9 and §8. Everything not named here stays as designed.
+
+### A. The edge reads in a fixed order (R-01, R-02, R-05, D-08, D-09, D-12)
+
+1. **Identify.** `ActorContextResolver` gets one final method the resources call, `identify()`: the
+   identity source's caller (`resolve()`, the method tests override), kept only when
+   `BookingCentres.jurisdictionOf(tenant)` is present. A caller of an unconfigured booking centre is
+   therefore *not identified* (401) on all four routes, before anything else (BR-01 as amended).
+   `EvaluateCustomerRiskError.BookingCentreUnknown` stays as defence in depth in the use case, and the
+   resource maps it to the same 401 `caller-not-identified` problem; the 422 `booking-centre-unknown`
+   answer disappears.
+2. **Evaluate only: the role**, which needs no input.
+3. **Read the body, bounded.** No resource binds `@RequestBody String` any more. A package-private
+   `web/BoundedBody` reads the servlet input stream only after steps 1 (and 2): a declared
+   `Content-Length` above the limit is refused without reading; otherwise at most limit + 1 bytes are
+   read, so a chunked body cannot exceed it either. Limits are named constants: 64 KiB (65 536 bytes)
+   for an evaluation, 16 KiB (16 384 bytes) for a decision. Too large → **413
+   `request-too-large`**. An `IOException` is caught by its exact type and counts as not readable.
+4. **Parse strictly into a tree.** A dedicated strict reader (not the application `JsonMapper`, and
+   not the mapper that reads stored JSON) parses the bytes as UTF-8 into a JSON tree with duplicate
+   key detection on. Anything that is not exactly one JSON object (absent body, empty body, array,
+   `null`, scalar, malformed JSON, a duplicate key, trailing content) → **400 `request-not-readable`**.
+5. **Read each field by its JSON type, never coerced.** From the object, each raw field is taken only
+   when its node has the expected JSON type: string for text and enumerations, boolean for yes/no,
+   object for a rated country, array for citizenships, integral number within `long` for the version
+   viewed. A node of any other type is treated as absent, so the field's own refusal applies
+   (`critical-fact-missing`, `product-request-missing`, `profile-class-not-recognised`, …), never a
+   neighbouring one (R-07). Unknown fields stay ignored.
+6. **Decide only: the role, from the kind (D-08).** The permission is chosen from the parsed kind, an
+   unrecognised kind falling back to `FREEZE_ASSETS`; then `DecisionKindNotRecognised` for a caller who
+   passed. Because the kind is read on its own (step 5), a mistyped other field no longer changes the
+   permission (R-02).
+7. Then the command's own parse and the use case, as before.
+
+### B. New refusals and their problems
+
+| Refusal | Command | Domain | Problem |
+|---|---|---|---|
+| Request too large (D-09) | both | none: decided at the edge | 413 `request-too-large` |
+| Request not readable (D-12) | both | none: decided at the edge | 400 `request-not-readable` |
+| Too many citizenships (D-10) | evaluate | `EvaluateCustomerRiskError.TooManyCitizenships`, after `NoCitizenship`; limit `MAX_CITIZENSHIPS = 10` | 400 `too-many-citizenships` |
+| Version viewed not valid (D-12) | decide | `RecordComplianceDecisionError.VersionViewedNotValid`, judged after the justification and before `RiskProfileChangedSinceViewed`; valid means present and ≥ 1 | 400 `version-viewed-not-valid` |
+
+The command keeps the version viewed as a not-yet-judged value, the same way it already carries the
+justification, so the BR-37 order is decided in the use case.
+
+### C. Customer number taken from the raw path (R-03)
+
+Spring's path matching strips `;…` from a segment. The four resources take the customer number from
+the raw request URI instead: the segment after `/api/risk-profiles/`, percent-decoded as UTF-8
+(`UriUtils.decode`), so a literal `;` stays part of the number (BR-06: compared exactly). The route
+mappings stay as they are; only the value comes from the raw segment. A segment Tomcat already
+refuses (`%00`, `%2F`, `%5C`, invalid UTF-8) is still refused by Tomcat.
+
+### D. Errors outside the four resources (R-08)
+
+An `ErrorController` in `adapters/web` answers every container error with a constant RFC 7807
+problem, `urn:problem-type:risk:request-not-handled`, the status taken from the servlet error status
+(4xx or 5xx, anything else 404), constant detail and constant `instance` `/api/risk-profiles`. No
+path, message, exception or trace. `server.error.include-path: never` is set as a second guard.
+
+### E. Responses
+
+Every response of the four resources carries `Cache-Control: no-store` (R-18).
+
+### F. Confidential `toString` (R-11)
+
+`CriticalFacts`, `RatedCountry`, `Explanation` and `CategoryContribution` override `toString` as
+`Type[***]`, like the records around them.
+
+### G. Relay (R-13, R-14)
+
+- `ViewProjector` maps to `ProjectionFailure` only failures that belong to the event itself
+  (`DataIntegrityViolationException`, unreadable JSON). A `TransientDataAccessException` (deadlock,
+  lock or query timeout) is not a projection failure: the chunk is released like a pool failure and
+  no attempt is counted.
+- `markDelivered` and `countAttempt` add `AND locked_by = :owner`; a relay whose lease was taken over
+  changes nothing.
+
+### H. Schema and database rights (R-09, R-17, R-20)
+
+- **V4** adds a `BEFORE TRUNCATE ... FOR EACH STATEMENT` trigger on `command.risk_profile_history`
+  that refuses. The total-score `CHECK` of §9 is deferred: the score lives inside the evaluation
+  document and is already capped by `RiskScore`; the deviation is recorded here instead.
+- **Two roles (D-11).** Flyway runs as the schema owner: `spring.flyway.user: ${FLYWAY_USERNAME}`,
+  `spring.flyway.password: ${FLYWAY_PASSWORD}`, no defaults. The service connects as
+  `DATABASE_USERNAME`, passed to migrations as the Flyway placeholder `service_role`. **V5** grants
+  that role `USAGE` on both schemas, `SELECT, INSERT, UPDATE` on the mutable tables, and only
+  `SELECT, INSERT` on `command.risk_profile_history`; it owns nothing, so it cannot disable the
+  append-only triggers.
+- The ERROR log in `RiskProfileSqlAdapter` no longer prints the internal profile id (D-05).
+
+### I. Build and text (R-12, R-15, R-16)
+
+- `@NullMarked` on every package under `com.gs5.kycaml`; NullAway's `AnnotatedPackages` corrected to
+  `com.gs5.kycaml`. An architecture test asserts every package is `@NullMarked`.
+- The PostgreSQL-backed relay tests are `*IT` (Failsafe), so `./mvnw test` needs no Docker.
+- The front-office message uses the en dash of BR-40: `Account active – no operational restrictions.`
+
+### Not changed
+
+R-19 (the 403 names the caller's own role) is kept. R-21 nits are optional.
+
+---
+
+## Addendum 2026-11-09: stage 6 re-review of the fix round (R-21 to R-29)
+
+Source: the independent code and security re-reviews of `66a9642..0b4aabf`. The orchestrator confirmed
+R-21 on a running server: an unidentified multipart POST with a 2 MB part is answered 413, not 401, so
+the body is parsed before identification.
+
+| R | Finding | Design |
+|---|---|---|
+| R-21 | Multipart parsing (DispatcherServlet `checkMultipart`, before any handler) reads and stores up to 10 MB before `identify()` | `spring.servlet.multipart.enabled: false`: no `MultipartResolver` exists. No route accepts multipart |
+| R-22 | `FormContentFilter` reads a whole form body of a PUT/PATCH/DELETE, unbounded, before dispatch | `spring.mvc.formcontent.filter.enabled: false`: no `FormContentFilter` bean |
+| R-23 | `ViewProjector` lets every non-integrity `DataAccessException` escape, so a persistent failure (lost grant, bad SQL) is retried forever, silently, never counted or parked | Amends G: only `TransientDataAccessException` escapes `ViewProjector` (with `TransactionException` in the relay); any other `DataAccessException` is the event's `ProjectionFailure` and counts an attempt. `OutboxRelay` logs one WARN per released chunk, naming only the exception type: `Outbox chunk released without counting an attempt (<SimpleName>)` |
+| R-24 | The `service_role` placeholder is quoted but not escaped | `RiskDatabaseConfiguration` sets it only when the user name matches `^[a-z_][a-z0-9_]{0,62}$`; otherwise it stays unset and Flyway refuses to migrate |
+| R-25 | `markDelivered`'s `locked_by` guard is untested | test only |
+| R-26 | the raw customer number is pinned on evaluate only | test only: view, front-office status and decision |
+| R-27 | `TooManyCitizenships` has no fast test and no order against `CountryInvalid` | test only: catalogue order rows 9, 10, 11 |
+| R-28 | the owner TRUNCATE test accepts any failure | test only: SQLState `P0001` from the append-only function |
+| R-29 | the production role wiring (`spring.flyway.user` ≠ datasource user through `RiskDatabaseConfiguration`) is never exercised | test only: a Spring context with a non-owner datasource user |
+
+**Deferred, recorded:** a fail-closed migration check that the service role is neither the migration
+owner nor a superuser (SR-03a). Every Spring IT today runs Flyway and the service as the same container
+superuser, so the check needs the IT setup moved to a separate role first. Also deferred:
+`server.tomcat.max-swallow-size` and a whole-body read deadline for identified callers (SR-04, low), the
+`Expect: 100-continue` timing, and default privileges for tables added after V5.
+
+### Recorded after stage 4 (round 3): SQL exception translation
+
+R-13 and R-23 assume a PostgreSQL lock timeout (SQLState `55P03`) arrives as a
+`TransientDataAccessException`. With Spring JDBC 7's default `SQLExceptionSubclassTranslator` it does
+not: it becomes `UncategorizedSQLException` (non-transient), which R-23 counts as an attempt. The
+deliberately empty `src/main/resources/sql-error-codes.xml` switches every `JdbcTemplate`/`JdbcClient`
+to `SQLErrorCodeSQLExceptionTranslator` with Spring's bundled PostgreSQL codes, where `55P03` is
+`CannotAcquireLockException`. Proven by removal: without the file (and its stale copy in
+`target/classes`), `OutboxTransientFailureIT` and `OutboxFailureVisibilityIT.shouldLogATransientRelease`
+fail. Side effects accepted: SQLState `21000` maps to `DuplicateKeyException` (a subclass of what it was);
+the first translated exception per data source reads database metadata.
+
+`ViewProjector` lists the non-transient branches of `DataAccessException` explicitly (no catch-all,
+no rethrow); a new direct subclass in a later Spring release would escape as if transient, and the relay's
+WARN line would show it.
+
+---
+
+## Addendum 2026-11-09 (2): after the approved re-review (R-30)
+
+Both re-reviews of `0b4aabf..836287b` returned `[APPROVED]`. One warning both raised is fixed:
+
+- **R-30 (CR W-1/W-2, SR-30).** `RiskDatabaseConfiguration` always removes any `service_role`
+  placeholder it finds, then sets it only for a user name that matches the plain-identifier pattern and
+  is not `public`, `none`, `current_user`, `session_user`, `current_role`, `user`, nor starts with `pg_`.
+  In PostgreSQL a quoted `"public"` still means PUBLIC, so V5 would otherwise grant every role in the
+  cluster, and V5 never runs again to undo it.
+- `ViewProjector`'s Javadoc names `TransactionException` (and non-database runtime exceptions) as also
+  escaping, as this design already says.
+
+Recorded, not fixed (reliability, not correctness of a successful run): on the first translated
+exception per data source, Spring reads database metadata through a second connection; if that fails
+(pool exhausted), that translation falls back and a lock timeout can be counted once (CR W-3). Also
+recorded: never enable `spring.mvc.log-request-details` with DEBUG on `org.springframework.web`
+(it would read and log form bodies before identification; SR I-2). Tomcat's `100 Continue` timing and
+`max-swallow-size` stay deferred (SR I-1).
+
+- **R-31 (security check of R-30, SR-31).** Flyway 12 resolves placeholder names case-insensitively
+  (`PlaceholderReplacingReader$CaseInsensitiveMap`, default-locale `toLowerCase`). The customizer must
+  remove every key that Flyway could read as `service_role`: equal ignoring case, or lower-casing to
+  `service_role` in the root locale or the default locale. With a valid user, the service's own name is
+  then the only such entry.
+- **R-32 (security check of R-31, SR-32).** Cleaning the placeholder map is not enough while the
+  placeholder syntax stays configurable: a suffix of `_role}` makes Flyway read `${service_role}` in V5 as
+  the name `service`. The customizer also pins `placeholderPrefix("${")`, `placeholderSuffix("}")` and
+  `placeholderReplacement(true)`, whatever the configuration says and whether or not the user is accepted.
+  With replacement off, V5 would fail on a role literally named `${service_role}` (SR-33, fails closed);
+  pinning it on removes that path too.
+
+### Closed (2026-11-09): exhaustive review of every `spring.flyway.*` setting
+
+After R-30, R-31 and R-32, one exhaustive security pass classified all 63 `spring.flyway.*` settings and
+the code paths into Flyway: `[APPROVED]`. None gives its holder more than the schema owner's credentials
+already give. The placeholder path is closed (map cleaned in every spelling, syntax pinned, absent name
+fails closed). Recorded as deployment controls in AGENTS.md: distinct Flyway and service users, no
+session-role switching, no extra migration or callback locations, no `init-sqls`. Deferred: a startup
+self-check that the session runs as the validated, non-owning, non-superuser service role (needs the
+`@ServiceConnection` ITs on two roles first; same prerequisite as SR-03a).

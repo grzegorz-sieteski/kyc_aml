@@ -7,4 +7,11 @@ public record CategoryContribution(
         FactorCategory category,
         int points,
         BigDecimal weight,
-        BigDecimal contribution) { }
+        BigDecimal contribution) {
+
+    /** Confidential (BR-43): never printed. */
+    @Override
+    public String toString() {
+        return "CategoryContribution[***]";
+    }
+}

@@ -1,0 +1,107 @@
+### Customer risk scoring - stage 5 exploratory and adversarial requests
+### Every request below was sent to a real Tomcat + PostgreSQL by RiskApiAdversarialIT (2026-11-08).
+### There is no identity source yet, so against a locally started service each call answers 401
+### first (BR-01). The expected status is the one an identified caller of the named role gets.
+
+@host = http://localhost:8080
+@customer = C-1001
+
+# ============================================================== QA-01: version viewed coerced
+
+### ONBOARDING_SYSTEM: create the customer -> 200, version 1
+POST {{host}}/api/risk-profiles/{{customer}}/evaluations
+Content-Type: application/json
+
+{"profileClass":"POLITICALLY_EXPOSED","residence":{"country":"DE","riskClass":"LOW"},
+ "citizenships":[{"country":"DE","riskClass":"LOW"}],"birth":{"country":"DE","riskClass":"LOW"},
+ "loginCountry":"AE","channel":"REMOTE","highRiskProductRequest":true,
+ "adverseMediaClass":"UNCONFIRMED_FINANCIAL_CRIME","sanctionsMatch":false,"terroristLink":false,"forgedIdentity":false}
+
+### L2: freeze on version 1.9 -> expect 400, nothing recorded. ACTUAL: 200, recorded as version 1 (defect QA-01)
+POST {{host}}/api/risk-profiles/{{customer}}/decisions
+Content-Type: application/json
+
+{"kind":"FREEZE_ASSETS","justification":"Analyst reviewed the alert and the documents","versionViewed":1.9}
+
+### L2: freeze on version "1" (a string) -> expect 400. ACTUAL: 200 (defect QA-01)
+POST {{host}}/api/risk-profiles/{{customer}}/decisions
+Content-Type: application/json
+
+{"kind":"FREEZE_ASSETS","justification":"Analyst reviewed the alert and the documents","versionViewed":"1"}
+
+# ============================================================== QA-02: yes/no answers coerced
+
+### ONBOARDING_SYSTEM: sanctionsMatch 0 -> expect 400. ACTUAL: 200, read as "no sanctions match" (defect QA-02)
+POST {{host}}/api/risk-profiles/C-1002/evaluations
+Content-Type: application/json
+
+{"profileClass":"INDIVIDUAL_EMPLOYED","residence":{"country":"DE","riskClass":"LOW"},
+ "citizenships":[{"country":"DE","riskClass":"LOW"}],"birth":{"country":"DE","riskClass":"LOW"},
+ "loginCountry":"DE","channel":"BRANCH","highRiskProductRequest":false,
+ "adverseMediaClass":"NONE","sanctionsMatch":0,"terroristLink":false,"forgedIdentity":false}
+
+### ONBOARDING_SYSTEM: sanctionsMatch "false" (a string) -> expect 400. ACTUAL: 200 (defect QA-02)
+POST {{host}}/api/risk-profiles/C-1003/evaluations
+Content-Type: application/json
+
+{"profileClass":"INDIVIDUAL_EMPLOYED","residence":{"country":"DE","riskClass":"LOW"},
+ "citizenships":[{"country":"DE","riskClass":"LOW"}],"birth":{"country":"DE","riskClass":"LOW"},
+ "loginCountry":"DE","channel":"BRANCH","highRiskProductRequest":false,
+ "adverseMediaClass":"NONE","sanctionsMatch":"false","terroristLink":false,"forgedIdentity":false}
+
+# ============================================================== QA-03: ';' truncates the customer number
+
+### ONBOARDING_SYSTEM: "C-1001;x" unencoded -> expect C-1001 untouched. ACTUAL: 200, C-1001 re-evaluated (defect QA-03)
+POST {{host}}/api/risk-profiles/C-1001;x/evaluations
+Content-Type: application/json
+
+{"profileClass":"INDIVIDUAL_EMPLOYED","residence":{"country":"DE","riskClass":"LOW"},
+ "citizenships":[{"country":"DE","riskClass":"LOW"}],"birth":{"country":"DE","riskClass":"LOW"},
+ "loginCountry":"DE","channel":"BRANCH","highRiskProductRequest":false,
+ "adverseMediaClass":"NONE","sanctionsMatch":false,"terroristLink":false,"forgedIdentity":false}
+
+### Encoded as %3B it is kept exactly -> 200, customer "C-1001;x" (correct)
+POST {{host}}/api/risk-profiles/C-1001%3Bx/evaluations
+Content-Type: application/json
+
+{"profileClass":"INDIVIDUAL_EMPLOYED","residence":{"country":"DE","riskClass":"LOW"},
+ "citizenships":[{"country":"DE","riskClass":"LOW"}],"birth":{"country":"DE","riskClass":"LOW"},
+ "loginCountry":"DE","channel":"BRANCH","highRiskProductRequest":false,
+ "adverseMediaClass":"NONE","sanctionsMatch":false,"terroristLink":false,"forgedIdentity":false}
+
+# ============================================================== QA-04: container errors echo the path
+
+### Any caller: DELETE -> 405. ACTUAL body: {"status":405,...,"path":"/api/risk-profiles/C-SECRET"} (defect QA-04)
+DELETE {{host}}/api/risk-profiles/C-SECRET
+
+### Any caller: unmapped sub-path -> 404 with the path echoed (defect QA-04)
+GET {{host}}/api/risk-profiles/C-SECRET/unknown
+
+# ============================================================== held (guarded by RiskApiAdversarialIT)
+
+### Encoded LF in the customer number -> 400 customer-number-control-character
+POST {{host}}/api/risk-profiles/C-%0AX/evaluations
+Content-Type: application/json
+
+{}
+
+### Encoded NUL, '/', '\' or invalid UTF-8 -> 400 from Tomcat itself (text/html, no server name or version)
+POST {{host}}/api/risk-profiles/C-%00X/evaluations
+Content-Type: application/json
+
+{}
+
+### 65 emoji as customer number -> 400 customer-number-too-long (64 pass: measured in code points)
+POST {{host}}/api/risk-profiles/%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80/evaluations
+Content-Type: application/json
+
+{}
+
+### L2: justification with a lone CR -> 400 justification-control-character (CR LF is accepted)
+POST {{host}}/api/risk-profiles/{{customer}}/decisions
+Content-Type: application/json
+
+{"kind":"ESCALATE_EDD","justification":"Analyst reviewed the alert\rand the documents","versionViewed":1}
+
+### ONBOARDING_SYSTEM: JSON nested 5 000 deep -> 400 problem+json (unreadable body counts as no input)
+### Concurrency (24 parallel freezes on one version: exactly one 200, the rest 409) is in the IT only.

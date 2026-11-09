@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * and marked DELIVERED in ONE short transaction on ONE connection; nobody waits for a second connection
  * while holding one; the relay never has more than B connections at once.
  */
-class OutboxChunkedProjectionTest extends RelaySupport {
+class OutboxChunkedProjectionIT extends RelaySupport {
 
     private static final int BUDGET = 3;
 

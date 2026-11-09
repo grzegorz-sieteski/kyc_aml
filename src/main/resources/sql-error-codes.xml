@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Deliberately empty. Spring JDBC 7 translates SQLExceptions with SQLExceptionSubclassTranslator unless a
+  file of this name is at the root of the classpath; then it uses SQLErrorCodeSQLExceptionTranslator with
+  Spring's own PostgreSQL codes (org/springframework/jdbc/support/sql-error-codes.xml), which this file
+  does not change.
+
+  Why it matters (R-13, R-23): the default translator has no mapping for SQLState 55P03, so a PostgreSQL
+  lock timeout becomes UncategorizedSQLException, a NonTransientDataAccessException. ViewProjector counts
+  every non-transient database failure as the event's own failure, so a lock timeout would be counted and,
+  ten times over, park a healthy row. With the error-code translator, 55P03 is CannotAcquireLockException,
+  a TransientDataAccessException, and the relay releases the chunk without counting an attempt.
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                           https://www.springframework.org/schema/beans/spring-beans.xsd">
+</beans>

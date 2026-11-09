@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>The projector is built with the plain template on purpose: it must be safe by itself, not by how the
  * Spring configuration happens to wire it.
  */
-class OutboxSavepointTest extends RelaySupport {
+class OutboxSavepointIT extends RelaySupport {
 
     private static final String POISON = "P-03";
 

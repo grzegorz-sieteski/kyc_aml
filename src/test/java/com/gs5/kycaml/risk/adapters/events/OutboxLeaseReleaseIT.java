@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Behaviour 6: when a chunk fails, the lease of its rows is released at once, not left to expire: another
  * relay (or the next round) can take them immediately, and nothing about the failure counts as an attempt.
  */
-class OutboxLeaseReleaseTest extends RelaySupport {
+class OutboxLeaseReleaseIT extends RelaySupport {
 
     enum Failure { POOL_TIMEOUT_ON_THE_CHUNK, COMMIT_FAILS_ON_THE_CHUNK }
 
