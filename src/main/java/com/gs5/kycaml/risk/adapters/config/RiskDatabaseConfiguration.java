@@ -17,8 +17,11 @@ import java.util.regex.Pattern;
  * with no defaults); the service connects as a role that owns nothing. The migrations grant that role
  * its rights through the Flyway placeholder {@code service_role}, which is set here to the user the
  * service actually connects as: {@code DATABASE_USERNAME} in production, the container's user under
- * {@code @ServiceConnection}. Taking it from the connection, not from a second setting, means the
- * grants can never name a role other than the one the service logs in as.
+ * {@code @ServiceConnection}. Taking it from the connection, not from a second setting, keeps the grants
+ * on the configured login user. It does not prove the session runs as that user: a {@code pg_service.conf}
+ * entry, {@code options=-c role=...} or a {@code SET ROLE} in the pool's init SQL can change the session
+ * role, and D-11 collapses if the Flyway user equals the service user. Those are deployment controls
+ * (AGENTS.md); a startup self-check is recorded as deferred in the design.
  *
  * <p>The placeholder is substituted into SQL that runs as the schema owner, and Flyway does not escape
  * it. So only a plain, unquoted PostgreSQL identifier of at most 63 characters is passed on (R-24), and
