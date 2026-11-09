@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 4 · Status: IN_PROGRESS (both re-reviews [APPROVED]; one shared warning, R-30, being fixed)
+Stage: 6 · Status: APPROVED (both re-reviews [APPROVED]; R-30 fixed after approval, security check of that diff pending)
 Updated: 2026-11-08
 
 ## Source
@@ -300,3 +300,12 @@ pattern accepts `public` (R-30). Further warnings are recorded in the ADR addend
 with no exception text or stack trace (W-4, passes). `RiskApiHardeningIT`: the multipart probe body is
 1.5 MB, under Tomcat's 2 MB swallow limit, so the 401 cannot be cut off (still 413 before R-21's fix).
 Run: Surefire 335, 9 failures (all R-30); Failsafe 159, 0 failures.
+
+## Stage 4 (fourth round): R-30 fixed (2026-11-09)
+
+Commit `51071e1`, `src/main/` only. Orchestrator's run of `check-write-lock.sh green`: src/test and docs
+untouched; `./mvnw -B verify` → 0 Checkstyle violations; Surefire 335, 0 failures; Failsafe 159,
+0 failures; BUILD SUCCESS.
+
+Known gap reported by the developer, not fixed: Flyway 12 environment-level placeholder overrides are
+read by `getPlaceholders()` but not cleared by `placeholders(Map)`. Spring Boot sets no such override.
