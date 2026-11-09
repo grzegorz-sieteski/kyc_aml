@@ -617,3 +617,9 @@ exception per data source, Spring reads database metadata through a second conne
 recorded: never enable `spring.mvc.log-request-details` with DEBUG on `org.springframework.web`
 (it would read and log form bodies before identification; SR I-2). Tomcat's `100 Continue` timing and
 `max-swallow-size` stay deferred (SR I-1).
+
+- **R-31 (security check of R-30, SR-31).** Flyway 12 resolves placeholder names case-insensitively
+  (`PlaceholderReplacingReader$CaseInsensitiveMap`, default-locale `toLowerCase`). The customizer must
+  remove every key that Flyway could read as `service_role`: equal ignoring case, or lower-casing to
+  `service_role` in the root locale or the default locale. With a valid user, the service's own name is
+  then the only such entry.

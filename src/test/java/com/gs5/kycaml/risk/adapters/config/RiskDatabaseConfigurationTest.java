@@ -81,4 +81,32 @@ class RiskDatabaseConfigurationTest {
 
         assertThat(placeholderFor("kyc_service", preset)).isEqualTo("kyc_service");
     }
+
+    private static java.util.Map<String, String> placeholdersAfter(String user, String presetKey) {
+        var configuration = Flyway.configure().placeholders(java.util.Map.of(presetKey, "public"));
+        placeholderFor(user, configuration);
+        return configuration.getPlaceholders();
+    }
+
+    @ParameterizedTest(name = "preset key {0}")
+    @ValueSource(strings = {"SERVICE_ROLE", "Service_Role", "service_ROLE", "SERV\u0130CE_ROLE"})
+    @DisplayName("R-31: Flyway matches placeholder names ignoring case, so no case variant of service_role survives an invalid user")
+    void shouldRemoveEveryCaseVariantForAnInvalidUser(String presetKey) {
+        assertThat(placeholdersAfter("Not Valid", presetKey).keySet())
+                .noneMatch(key -> key.equalsIgnoreCase(RiskDatabaseConfiguration.SERVICE_ROLE_PLACEHOLDER)
+                        || key.toLowerCase(java.util.Locale.ROOT).equals(RiskDatabaseConfiguration.SERVICE_ROLE_PLACEHOLDER)
+                        || key.toLowerCase(java.util.Locale.forLanguageTag("tr")).equals(
+                                RiskDatabaseConfiguration.SERVICE_ROLE_PLACEHOLDER));
+    }
+
+    @ParameterizedTest(name = "preset key {0}")
+    @ValueSource(strings = {"SERVICE_ROLE", "Service_Role"})
+    @DisplayName("R-31: with a valid user, the service's own name is the only service_role left, in any case")
+    void shouldLeaveOnlyTheServiceUserForAValidUser(String presetKey) {
+        var placeholders = placeholdersAfter("kyc_service", presetKey);
+
+        assertThat(placeholders.entrySet())
+                .filteredOn(entry -> entry.getKey().equalsIgnoreCase(RiskDatabaseConfiguration.SERVICE_ROLE_PLACEHOLDER))
+                .extracting(java.util.Map.Entry::getValue).containsExactly("kyc_service");
+    }
 }

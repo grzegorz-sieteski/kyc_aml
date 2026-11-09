@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 6 · Status: APPROVED (both re-reviews [APPROVED]; R-30 fixed after approval, security check of that diff pending)
+Stage: 4 · Status: IN_PROGRESS (security check of R-30 found R-31; RED done, developer next)
 Updated: 2026-11-08
 
 ## Source
@@ -309,3 +309,10 @@ untouched; `./mvnw -B verify` → 0 Checkstyle violations; Surefire 335, 0 failu
 
 Known gap reported by the developer, not fixed: Flyway 12 environment-level placeholder overrides are
 read by `getPlaceholders()` but not cleared by `placeholders(Map)`. Spring Boot sets no such override.
+
+## Security check of R-30 (2026-11-09): [CHANGES REQUIRED], R-31
+
+Flyway matches placeholder names ignoring case; the R-30 removal did not. A preset `SERVICE_ROLE=public`
+would survive and reach V5's GRANT. Needs control of the configuration, but the effect is permanent.
+Stage 3: `RiskDatabaseConfigurationTest` gains 6 failing cases (case variants, including a Turkish
+dotted capital I; and a valid user leaving only its own name).
