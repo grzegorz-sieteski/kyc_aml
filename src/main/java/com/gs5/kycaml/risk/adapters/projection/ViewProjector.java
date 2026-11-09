@@ -48,9 +48,13 @@ public class ViewProjector {
      * Success is true when the views were written and false when the version gate ignored the
      * projection because the views are already at that version or later (idempotence).
      *
-     * <p>Only a {@link TransientDataAccessException} (a deadlock, a lock or query timeout) escapes: it
-     * says nothing about the event, so the relay releases the chunk without counting an attempt (R-13).
-     * Every other database failure is this event's {@link ProjectionFailure} and counts an attempt
+     * <p>Three kinds of exception escape, and none of them says anything about the event, so the relay
+     * releases the chunk without counting an attempt (R-13): a {@link TransientDataAccessException} (a
+     * deadlock, a lock or query timeout); a {@link org.springframework.transaction.TransactionException}
+     * from the transaction itself (it could not begin, commit or roll back, for example because no
+     * connection could be obtained), which is not a {@code DataAccessException}; and any runtime
+     * exception that does not come from the database at all.
+     * Every other data-access failure is this event's {@link ProjectionFailure} and counts an attempt
      * (R-23): a refused view, but also a persistent failure such as bad SQL or a lost grant, which would
      * otherwise be retried forever without ever being counted or parked. So is a view that cannot be
      * read.
