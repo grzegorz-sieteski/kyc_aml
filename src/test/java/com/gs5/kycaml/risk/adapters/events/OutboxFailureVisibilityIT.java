@@ -49,7 +49,13 @@ class OutboxFailureVisibilityIT extends RelaySupport {
             holder.rollback();
         }
 
-        assertThat(output.getAll()).contains("Outbox chunk released without counting an attempt (")
+        var warnings = output.getAll().lines()
+                .filter(line -> line.contains("Outbox chunk released without counting an attempt")).toList();
+        assertThat(warnings).as("W-4: exactly the type, nothing else on the line").isNotEmpty()
+                .allSatisfy(line -> assertThat(line)
+                        .endsWith("Outbox chunk released without counting an attempt (CannotAcquireLockException)"));
+        assertThat(output.getAll()).as("no exception text and no stack trace from the release")
+                .doesNotContain("CannotAcquireLockException:").doesNotContain("at org.springframework.jdbc")
                 .doesNotContain("P-01");
     }
 }

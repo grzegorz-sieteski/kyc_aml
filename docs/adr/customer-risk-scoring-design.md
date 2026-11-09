@@ -596,3 +596,24 @@ the first translated exception per data source reads database metadata.
 `ViewProjector` lists the non-transient branches of `DataAccessException` explicitly (no catch-all,
 no rethrow); a new direct subclass in a later Spring release would escape as if transient, and the relay's
 WARN line would show it.
+
+---
+
+## Addendum 2026-11-09 (2): after the approved re-review (R-30)
+
+Both re-reviews of `0b4aabf..836287b` returned `[APPROVED]`. One warning both raised is fixed:
+
+- **R-30 (CR W-1/W-2, SR-30).** `RiskDatabaseConfiguration` always removes any `service_role`
+  placeholder it finds, then sets it only for a user name that matches the plain-identifier pattern and
+  is not `public`, `none`, `current_user`, `session_user`, `current_role`, `user`, nor starts with `pg_`.
+  In PostgreSQL a quoted `"public"` still means PUBLIC, so V5 would otherwise grant every role in the
+  cluster, and V5 never runs again to undo it.
+- `ViewProjector`'s Javadoc names `TransactionException` (and non-database runtime exceptions) as also
+  escaping, as this design already says.
+
+Recorded, not fixed (reliability, not correctness of a successful run): on the first translated
+exception per data source, Spring reads database metadata through a second connection; if that fails
+(pool exhausted), that translation falls back and a lock timeout can be counted once (CR W-3). Also
+recorded: never enable `spring.mvc.log-request-details` with DEBUG on `org.springframework.web`
+(it would read and log form bodies before identification; SR I-2). Tomcat's `100 Continue` timing and
+`max-swallow-size` stay deferred (SR I-1).

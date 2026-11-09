@@ -142,5 +142,7 @@ Be honest about this, because the distinction matters:
   Spring JDBC translate PostgreSQL errors by error code, so a lock timeout is transient and the outbox
   relay does not count it as a failed attempt. Deleting it breaks `OutboxTransientFailureIT`. When you
   test such a removal, delete the copy in `target/classes` too: `verify` without `clean` keeps it.
+- **Never enable `spring.mvc.log-request-details`** together with DEBUG on `org.springframework.web`:
+  `DispatcherServlet` would then read and log form bodies before the caller is identified (BR-01, BR-43).
 - Migrations run as the schema owner (`FLYWAY_USERNAME`), the service as a role that owns nothing
   (`DATABASE_USERNAME`); `V5` grants it its rights through the Flyway placeholder `service_role`.

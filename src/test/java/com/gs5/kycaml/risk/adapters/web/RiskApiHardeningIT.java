@@ -471,10 +471,10 @@ class RiskApiHardeningIT {
         }
 
         @Test
-        @DisplayName("R-21: nobody identified: a multipart POST with a 2 MB part is a 401, not a 413 from parsing it")
+        @DisplayName("R-21: nobody identified: a multipart POST with a 1.5 MB part is a 401, not a 413 from parsing it (under the 2 MB swallow limit, so the answer is never cut off)")
         void shouldRefuseAnUnidentifiedMultipartPostBeforeParsingIt() throws Exception {
             var body = "--x\r\nContent-Disposition: form-data; name=\"f\"; filename=\"a\"\r\n\r\n"
-                    + "a".repeat(2 * 1024 * 1024) + "\r\n--x--\r\n";
+                    + "a".repeat(1536 * 1024) + "\r\n--x--\r\n";
             var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port
                             + "/api/risk-profiles/" + newNumber() + "/evaluations"))
                     .header("Content-Type", "multipart/form-data; boundary=x")

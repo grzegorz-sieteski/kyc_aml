@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 6 · Status: AWAITING RE-REVIEW (R-21 to R-29 fixed, `./mvnw -B verify` green)
+Stage: 4 · Status: IN_PROGRESS (both re-reviews [APPROVED]; one shared warning, R-30, being fixed)
 Updated: 2026-11-08
 
 ## Source
@@ -285,3 +285,18 @@ request; the verified commit follows it.
 
 Orchestrator's run: `./mvnw -B verify` → 0 Checkstyle violations; Surefire 324, 0 failures; Failsafe
 159, 0 failures; BUILD SUCCESS.
+
+## Stage 6 re-review of `0b4aabf..836287b` (2026-11-09): [APPROVED] from both
+
+No blocker, no critical. Security: no way left for an unidentified caller to make the service read,
+buffer, parse or store a body before `identify()` in the shipped configuration (checked against the
+Boot 4.1.2, Spring 7.0.10 and Tomcat 11.0.27 bytecode). Both reviewers raised the same warning: the role
+pattern accepts `public` (R-30). Further warnings are recorded in the ADR addendum (2) of 2026-11-09.
+
+## Stage 3 (fourth round): R-30 and the test warnings (2026-11-09)
+
+`RiskDatabaseConfigurationTest`: reserved names and a preset placeholder (9 failing cases, R-30); a
+63-character name accepted (W-5). `OutboxFailureVisibilityIT`: the WARN line must end in exactly the type,
+with no exception text or stack trace (W-4, passes). `RiskApiHardeningIT`: the multipart probe body is
+1.5 MB, under Tomcat's 2 MB swallow limit, so the 401 cannot be cut off (still 413 before R-21's fix).
+Run: Surefire 335, 9 failures (all R-30); Failsafe 159, 0 failures.
