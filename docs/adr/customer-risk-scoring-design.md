@@ -639,3 +639,50 @@ fails closed). Recorded as deployment controls in AGENTS.md: distinct Flyway and
 session-role switching, no extra migration or callback locations, no `init-sqls`. Deferred: a startup
 self-check that the session runs as the validated, non-owning, non-superuser service role (needs the
 `@ServiceConnection` ITs on two roles first; same prerequisite as SR-03a).
+
+---
+
+## Addendum 2026-11-09 (3): identity source (D-13 to D-16)
+
+**Mechanism.** Spring Security OAuth2 Resource Server with JWT (`spring-boot-starter-security` and the
+OAuth2 resource-server starter). Stateless: no session, no CSRF (bearer tokens only, no cookies), no form
+login, no HTTP Basic. Every request is let through the filter chain (`permitAll`): the decision stays in
+`OperationGate`, so the refusal order and the constant problems are unchanged. A request **without** a
+token reaches the resources as unauthenticated and is refused there as `caller-not-identified`. A
+request **with** an invalid token is refused by the resource-server filter; its `AuthenticationEntryPoint`
+and `AccessDeniedHandler` answer the same constant 401 problem (`urn:problem-type:risk:caller-not-identified`,
+`Cache-Control: no-store`, a `WWW-Authenticate: Bearer` header without error description). Nothing reads the
+body: the bearer token is taken from the `Authorization` header only; form-parameter and query-parameter
+tokens are explicitly disabled.
+
+**Token validation.** Signature (RS256 only) against the issuer's keys; `exp` and `nbf` with Spring's
+default clock skew; `iss` equal to the configured issuer; `aud` containing the configured audience. Configuration
+(Boot properties, no defaults for the security-relevant ones): `spring.security.oauth2.resourceserver.jwt.issuer-uri`
+(`ISSUER_URI`, for Entra `https://login.microsoftonline.com/<tenant>/v2.0`),
+`spring.security.oauth2.resourceserver.jwt.audiences` (`TOKEN_AUDIENCE`, the app's client id or App ID URI), and
+`spring.security.oauth2.resourceserver.jwt.jwk-set-uri` (`JWK_SET_URI`, for Entra
+`https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys`). The issuer is validated, never used for
+discovery at startup. The production path is used in tests too: `IdentityIT` serves a JWK set from a
+local HTTP server with a key generated at test time. `src/test/resources/config/application.yml` gives every
+other Spring test a test issuer, audience and an unused JWK set URI; they never send a token, because they
+override `resolve()`.
+
+**Claims → `AuthenticatedCaller`** (D-14), names in `app.identity.*`:
+
+| Property | Default | Entra ID setup |
+|---|---|---|
+| `app.identity.actor-claim` | `oid` | `oid`: the user's or service principal's object id, stable across apps |
+| `app.identity.role-claim` | `roles` | app roles; each app role's *value* is exactly an `ActorRole` name |
+| `app.identity.booking-centre-claim` | `booking_centre` | an optional claim from a directory extension attribute, renamed in the token configuration |
+
+The claim value must have the expected JSON type: the actor claim a string; the role claim a string or an
+array of strings; the booking-centre claim a string. Roles that are not `ActorRole` names are ignored;
+exactly one `ActorRole` must remain (D-15), else no caller. The booking centre must be a canonical UUID
+(`ActorContext.parse`) and in scope (`identify()`, D-16). Any other outcome is `Optional.empty()`, i.e. 401.
+
+**Where.** `ActorContextResolver.resolve()` reads the `JwtAuthenticationToken` from the security context
+(the tests' `@Primary` override of `resolve()` keeps working). A `SecurityFilterChain` bean and the claim
+mapping live in `risk/adapters/web` (or `risk/adapters/config` for the chain); no Spring Security type reaches
+`domain/`.
+
+**Not doing now.** mTLS for the onboarding system, token introspection, per-request revocation checks.

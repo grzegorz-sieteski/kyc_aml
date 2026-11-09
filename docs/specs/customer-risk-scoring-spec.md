@@ -25,6 +25,10 @@ owner's answers of 2026-11-07 recorded below.
 | D-10 | 2026-11-08 | An evaluation carries at most 10 citizenships. More are refused as **too many citizenships** (R-10). |
 | D-11 | 2026-11-08 | The service works with database rights that cannot change its own structure or rewrite the recorded history: the structure is created and changed by a separate owner, and the service may only add to the history and read it (R-09). |
 | D-12 | 2026-11-08 | Input is read strictly. Input that is not a single well-formed object, or that names a field twice, is refused as **request not readable**. A field whose value is of the wrong kind (a number or text where yes or no is required, text or a fraction where a version is required) is refused as that field's own refusal, never coerced. A version viewed that is missing, not a whole number or below 1 is refused as **version viewed not valid** (R-06, R-07). |
+| D-13 | 2026-11-09 | A caller is identified only by a signed access token issued by the bank's identity provider, Microsoft Entra ID, for this service, presented with the request. The token must be genuine, current, issued by the configured issuer and meant for this service. Anything else, including a missing token, is **caller not identified**. |
+| D-14 | 2026-11-09 | The token names the caller's identity, role and booking centre in claims whose names are configured, not fixed in the service, so the identity provider's setup can change without a release. |
+| D-15 | 2026-11-09 | A token must carry exactly one of the five roles of A-02. No role of this service, more than one, or a role name that does not match exactly, is **caller not identified**. |
+| D-16 | 2026-11-09 | The booking centre in the token must be a well-formed booking centre identifier, and one of the booking centres in scope (D-06); otherwise the caller is not identified (BR-01). |
 
 ## Scope
 
@@ -104,7 +108,7 @@ with a marker is not confirmed until that assumption is.
 
 | ID | Rule | Condition | Expected outcome / refusal |
 |---|---|---|---|
-| `BR-01` | A caller must be identified before any operation | No caller is known: no booking centre, identity and role together; or the caller's booking centre is not one of the booking centres in scope (D-06) | Refused: **caller not identified**. Nothing is recorded and nothing is returned |
+| `BR-01` | A caller must be identified before any operation | No caller is known: no valid token for this service (D-13), or the token does not name exactly one identity, one role and one booking centre (D-14, D-15, D-16); or the caller's booking centre is not one of the booking centres in scope (D-06) | Refused: **caller not identified**. Nothing is recorded and nothing is returned |
 | `BR-02` | Each operation, and each kind of compliance decision, is open only to the roles listed for it (A-02) | The caller's role is not listed for the operation or decision | Refused: **role may not perform this operation** |
 | `BR-03` | The role is decided before any input is examined (A-03) | Any operation is attempted | A caller whose role is not permitted learns nothing about whether the input was valid or whether the customer exists |
 | `BR-04` | An operation reaches only risk profiles of the caller's own booking centre (A-04) | The customer number names a profile of another booking centre, or no profile at all | The two cases are indistinguishable to the caller: both are **customer not found** |
@@ -478,4 +482,5 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
 - [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07); A-27 amended on 2026-11-08 (D-08)
+- [x] The identity decisions D-13 to D-16 (2026-11-09) are reflected in BR-01
 - [x] The stage 6 decisions D-08 to D-12 (2026-11-08) are reflected in BR-01, BR-08, BR-10, BR-12, BR-33, BR-37 and both catalogues

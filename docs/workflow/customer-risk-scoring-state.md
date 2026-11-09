@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 6 · Status: APPROVED (all reviews [APPROVED]; open items are product-owner decisions and recorded deferrals)
+Stage: 4 · Status: IN_PROGRESS (identity source D-13 to D-16: spec, design and RED tests done; developer next)
 Updated: 2026-11-08
 
 ## Source
@@ -340,3 +340,20 @@ call is 401 until one is chosen), dead-letter handling of the outbox, and the `o
 Deferred and recorded in the ADR: the fail-closed D-11 checks at migration and at startup (both need the
 Spring ITs on two roles), `max-swallow-size` and `100 Continue` timing, error-code lookup under an
 exhausted pool, the total-score `CHECK`, and `RelayPressureSpike` failing when run by hand.
+
+## Identity source (2026-11-09): decisions D-13 to D-16
+
+Branch restarted from `main` after PR #1 was merged. Product owner: JWT bearer tokens (OAuth2 resource
+server) issued by Microsoft Entra ID; claim names configurable; exactly one role of this service per token,
+else 401. Spec D-13 to D-16 and BR-01; design: ADR addendum 2026-11-09 (3).
+
+Stage 3: `IdentityIT` and `IdentityClaimNamesIT` drive the real filter chain and resolver with RS256 tokens
+signed by JDK crypto and a JWK set served locally (`TestTokens`); `src/test/resources/config/application.yml`
+gives the other Spring tests test values. Failing, for the reason named: every token that should be accepted
+(7 cases) and the `WWW-Authenticate: Bearer` header. The 18 bad-token cases and the query/form cases pass
+already **only because today's resolver refuses everything**: they guard against over-acceptance once the
+resolver exists, and are to be proved by mutation after stage 4.
+Run: Surefire 343, 0 failures; Failsafe 189, 8 failures (all identity).
+Gate: `check-write-lock.sh red` reports FAIL ("./mvnw test PASSED") because it checks Surefire only and
+this round's failing tests are all integration tests; the RED evidence is the Failsafe run above. Gap in
+the script, recorded: a RED round made only of `*IT` cannot pass it.
