@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 4 · Status: IN_PROGRESS (identity source D-13 to D-16: spec, design and RED tests done; developer next)
+Stage: 6 · Status: IN REVIEW (identity source implemented, `./mvnw -B verify` green; code and security review running)
 Updated: 2026-11-08
 
 ## Source
@@ -357,3 +357,17 @@ Run: Surefire 343, 0 failures; Failsafe 189, 8 failures (all identity).
 Gate: `check-write-lock.sh red` reports FAIL ("./mvnw test PASSED") because it checks Surefire only and
 this round's failing tests are all integration tests; the RED evidence is the Failsafe run above. Gap in
 the script, recorded: a RED round made only of `*IT` cannot pass it.
+
+## Identity source: stage 4 done (2026-11-09)
+
+`57e7111`, `src/main/` and `pom.xml` only (the container restarted mid-round; the working tree survived and
+the developer's report was recovered from its transcript). Orchestrator's GREEN gate: src/test and docs
+untouched; 0 Checkstyle violations; Surefire 343, Failsafe 189, 0 failures; BUILD SUCCESS.
+
+Mutation check of the refusal tests, which had passed before any identity code existed: accepting the
+first of several roles, and allowing a query-string token, each fail `IdentityIT`. Removing `audiences`
+from the shipped `application.yml` failed nothing, because the ITs set it themselves; `ProductionIdentitySettingsTest`
+now pins the shipped settings and fails under that mutation.
+
+Developer's deviations, recorded in the ADR: three firewall allowances (`;`, encoded CR, LF) so BR-06 keeps
+being answered by the resources; Spring Security's `/.well-known/oauth-protected-resource` endpoint exists.

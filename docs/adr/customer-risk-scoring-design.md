@@ -686,3 +686,14 @@ mapping live in `risk/adapters/web` (or `risk/adapters/config` for the chain); n
 `domain/`.
 
 **Not doing now.** mTLS for the onboarding system, token introspection, per-request revocation checks.
+
+### Recorded after stage 4 (identity)
+
+- **HTTP firewall.** Spring Security's `StrictHttpFirewall` refuses a literal `;` and encoded CR/LF before any
+  resource runs, which broke BR-06's own answers (R-03, R-26, the control-character refusal). The strict
+  firewall stays, with exactly those three allowances; the resources keep deciding as before.
+- **Protected-resource metadata.** Spring Security 7.1 always serves `GET /.well-known/oauth-protected-resource`
+  (no switch found in 7.1.2). It reads no body; whether its content is acceptable is for the security review.
+- **Shipped settings are pinned by a test** (`ProductionIdentitySettingsTest`): the ITs set issuer, audience
+  and keys themselves, so only this test notices if `application.yml` loses `audiences`.
+- `check-write-lock.sh red` checks Surefire only; a RED round made of `*IT` alone cannot pass it.

@@ -13,7 +13,7 @@ Read this before anything else; `.github/copilot-instructions.md` holds the hard
 ./mvnw -B verify -DskipITs                           # skip ITs when Docker is unavailable
 ./mvnw -B test -Dtest=ArchitectureRulesTest          # architecture rules only
 ./mvnw -B test -Dtest=ResultTest                     # one test class
-./mvnw -B spring-boot:run                            # run locally (needs Postgres; DATABASE_* and FLYWAY_* env, D-11)
+./mvnw -B spring-boot:run                            # run locally (needs Postgres; DATABASE_*, FLYWAY_* and identity env)
 ```
 
 JDK 25 is required. Integration tests (`*IT.java`) need a running Docker daemon.
@@ -119,8 +119,10 @@ Be honest about this, because the distinction matters:
 - One business module exists: `risk` (customer risk scoring), specified from the ARGON analysis (an
   AML/KYC/CTF specification and architecture produced with Gemini and supplied by the product owner).
   `docs/workflow/customer-risk-scoring-state.md` records what each stage found. `ActorRole` carries
-  the KYC roles. There is no identity source yet: the resolver is fail-closed, so every call is 401
-  until one is chosen.
+  the KYC roles. Callers are identified by JWT bearer tokens from Microsoft Entra ID (D-13 to D-16):
+  `ISSUER_URI`, `TOKEN_AUDIENCE` and `JWK_SET_URI` are required, with no defaults; claim names are
+  `app.identity.*`. No token, an invalid one, or claims that do not name exactly one role and one
+  booking centre in scope: 401. Spring tests get test values from `src/test/resources/config/application.yml`.
 - **NullAway runs on `src/main` at compile time** (Error Prone 2.52 + NullAway 0.14.3). It needs the
   `--add-exports` flags in `.mvn/jvm.config`, which `./mvnw` picks up automatically. If you build
   with another Maven (IntelliJ's bundled one included), point it at that file or the compile fails
