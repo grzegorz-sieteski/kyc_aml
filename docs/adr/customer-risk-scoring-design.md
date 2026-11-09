@@ -629,3 +629,13 @@ recorded: never enable `spring.mvc.log-request-details` with DEBUG on `org.sprin
   `placeholderReplacement(true)`, whatever the configuration says and whether or not the user is accepted.
   With replacement off, V5 would fail on a role literally named `${service_role}` (SR-33, fails closed);
   pinning it on removes that path too.
+
+### Closed (2026-11-09): exhaustive review of every `spring.flyway.*` setting
+
+After R-30, R-31 and R-32, one exhaustive security pass classified all 63 `spring.flyway.*` settings and
+the code paths into Flyway: `[APPROVED]`. None gives its holder more than the schema owner's credentials
+already give. The placeholder path is closed (map cleaned in every spelling, syntax pinned, absent name
+fails closed). Recorded as deployment controls in AGENTS.md: distinct Flyway and service users, no
+session-role switching, no extra migration or callback locations, no `init-sqls`. Deferred: a startup
+self-check that the session runs as the validated, non-owning, non-superuser service role (needs the
+`@ServiceConnection` ITs on two roles first; same prerequisite as SR-03a).

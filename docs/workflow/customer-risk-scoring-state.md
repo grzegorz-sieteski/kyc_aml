@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 4 · Status: IN_PROGRESS (R-31 fixed in `a0fca7f`; its security check found R-32; RED done, developer next)
+Stage: 6 · Status: APPROVED (all reviews [APPROVED]; open items are product-owner decisions and recorded deferrals)
 Updated: 2026-11-08
 
 ## Source
@@ -323,3 +323,20 @@ dotted capital I; and a valid user leaving only its own name).
 untouched; Surefire 341, Failsafe 159, 0 failures; BUILD SUCCESS. The check confirmed the key removal is
 complete, then found that a configured placeholder suffix makes V5 read another name (R-32). Stage 3:
 two failing cases in `RiskDatabaseConfigurationTest` pin prefix, suffix and replacement.
+
+## R-32 fixed and the Flyway path closed (2026-11-09)
+
+`05a9fbb`: prefix, suffix and replacement pinned. Orchestrator's GREEN gate: src/test and docs untouched;
+Surefire 343, Failsafe 159, 0 failures; BUILD SUCCESS. Then one exhaustive security pass over every
+`spring.flyway.*` setting instead of another narrow one: `[APPROVED]`. Its two recommendations became
+deployment controls in AGENTS.md and a deferred startup self-check in the ADR; a Javadoc line in
+`RiskDatabaseConfiguration` that overstated the guarantee was corrected (comment only).
+
+## Where the module stands
+
+Every review round is approved: stage 5 QA findings, stage 6 code and security reviews and their three
+re-reviews, and the R-30 to R-32 security checks. Open, for the product owner: the identity source (every
+call is 401 until one is chosen), dead-letter handling of the outbox, and the `openapi/` contract.
+Deferred and recorded in the ADR: the fail-closed D-11 checks at migration and at startup (both need the
+Spring ITs on two roles), `max-swallow-size` and `100 Continue` timing, error-code lookup under an
+exhausted pool, the total-score `CHECK`, and `RelayPressureSpike` failing when run by hand.

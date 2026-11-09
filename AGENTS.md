@@ -144,5 +144,10 @@ Be honest about this, because the distinction matters:
   test such a removal, delete the copy in `target/classes` too: `verify` without `clean` keeps it.
 - **Never enable `spring.mvc.log-request-details`** together with DEBUG on `org.springframework.web`:
   `DispatcherServlet` would then read and log form bodies before the caller is identified (BR-01, BR-43).
+- **Deployment controls for D-11 (not enforced in code):** `FLYWAY_USERNAME` must differ from
+  `DATABASE_USERNAME`; the service role must not be a superuser or a member of the schema owner; no
+  `pg_service.conf` `user=`, `options=-c role=` or pool init `SET ROLE` for the service connection; and
+  `spring.flyway.locations`, `callback-locations`, `init-sqls`, `jdbc-properties` stay unset. Whoever
+  controls `spring.flyway.*` holds the schema owner's power anyway (exhaustive review, 2026-11-09).
 - Migrations run as the schema owner (`FLYWAY_USERNAME`), the service as a role that owns nothing
   (`DATABASE_USERNAME`); `V5` grants it its rights through the Flyway placeholder `service_role`.
