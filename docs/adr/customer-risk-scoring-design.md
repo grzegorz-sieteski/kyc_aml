@@ -580,3 +580,19 @@ owner nor a superuser (SR-03a). Every Spring IT today runs Flyway and the servic
 superuser, so the check needs the IT setup moved to a separate role first. Also deferred:
 `server.tomcat.max-swallow-size` and a whole-body read deadline for identified callers (SR-04, low), the
 `Expect: 100-continue` timing, and default privileges for tables added after V5.
+
+### Recorded after stage 4 (round 3): SQL exception translation
+
+R-13 and R-23 assume a PostgreSQL lock timeout (SQLState `55P03`) arrives as a
+`TransientDataAccessException`. With Spring JDBC 7's default `SQLExceptionSubclassTranslator` it does
+not: it becomes `UncategorizedSQLException` (non-transient), which R-23 counts as an attempt. The
+deliberately empty `src/main/resources/sql-error-codes.xml` switches every `JdbcTemplate`/`JdbcClient`
+to `SQLErrorCodeSQLExceptionTranslator` with Spring's bundled PostgreSQL codes, where `55P03` is
+`CannotAcquireLockException`. Proven by removal: without the file (and its stale copy in
+`target/classes`), `OutboxTransientFailureIT` and `OutboxFailureVisibilityIT.shouldLogATransientRelease`
+fail. Side effects accepted: SQLState `21000` maps to `DuplicateKeyException` (a subclass of what it was);
+the first translated exception per data source reads database metadata.
+
+`ViewProjector` lists the non-transient branches of `DataAccessException` explicitly (no catch-all,
+no rethrow); a new direct subclass in a later Spring release would escape as if transient, and the relay's
+WARN line would show it.

@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 4 · Status: IN_PROGRESS (re-review rejected the fix round: R-21 to R-29; stage 3 RED done, developer next)
+Stage: 6 · Status: AWAITING RE-REVIEW (R-21 to R-29 fixed, `./mvnw -B verify` green)
 Updated: 2026-11-08
 
 ## Source
@@ -268,3 +268,20 @@ Gate: `check-write-lock.sh red` OK. Failing, each for the reason it names: 7 `Ri
 cases, 3 `BeforeIdentification` cases, 2 `OutboxFailureVisibilityIT` cases. Passing by design (test-only
 items R-25 to R-29, the code already does it): the new ownership, citizenship, TRUNCATE, production-role
 and raw-number tests.
+
+## Stage 4 (third round): R-21 to R-24 implemented (2026-11-09)
+
+`@developer` in a fresh context, `src/main/` only; `git diff 0bf5e2f -- src/test docs` empty. Multipart
+and the form content filter are off; the projector counts every non-transient database failure; each
+released chunk is logged with the exception type only; the role name is validated.
+
+The developer found what the design missed: R-23 depends on SQL exception translation. An empty
+`sql-error-codes.xml` is required (see the ADR note). The orchestrator proved it by removal: without the
+file, two lock-timeout tests fail; a first removal attempt passed falsely because `target/classes` kept
+a stale copy.
+
+A WIP commit (`6c94cc3`) of the developer's half-done tree was pushed while it ran, at a stop hook's
+request; the verified commit follows it.
+
+Orchestrator's run: `./mvnw -B verify` → 0 Checkstyle violations; Surefire 324, 0 failures; Failsafe
+159, 0 failures; BUILD SUCCESS.

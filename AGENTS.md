@@ -138,5 +138,9 @@ Be honest about this, because the distinction matters:
   property under the old prefix is silently ignored, which is how `include-stacktrace: never` sat in
   `application.yml` doing nothing until 2026-11-08. Check a property against the Boot metadata before
   trusting it as a control.
+- **`src/main/resources/sql-error-codes.xml` is empty on purpose and must stay.** Its presence makes
+  Spring JDBC translate PostgreSQL errors by error code, so a lock timeout is transient and the outbox
+  relay does not count it as a failed attempt. Deleting it breaks `OutboxTransientFailureIT`. When you
+  test such a removal, delete the copy in `target/classes` too: `verify` without `clean` keeps it.
 - Migrations run as the schema owner (`FLYWAY_USERNAME`), the service as a role that owns nothing
   (`DATABASE_USERNAME`); `V5` grants it its rights through the Flyway placeholder `service_role`.
