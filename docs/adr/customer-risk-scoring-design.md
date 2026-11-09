@@ -554,3 +554,29 @@ Every response of the four resources carries `Cache-Control: no-store` (R-18).
 ### Not changed
 
 R-19 (the 403 names the caller's own role) is kept. R-21 nits are optional.
+
+---
+
+## Addendum 2026-11-09: stage 6 re-review of the fix round (R-21 to R-29)
+
+Source: the independent code and security re-reviews of `66a9642..0b4aabf`. The orchestrator confirmed
+R-21 on a running server: an unidentified multipart POST with a 2 MB part is answered 413, not 401, so
+the body is parsed before identification.
+
+| R | Finding | Design |
+|---|---|---|
+| R-21 | Multipart parsing (DispatcherServlet `checkMultipart`, before any handler) reads and stores up to 10 MB before `identify()` | `spring.servlet.multipart.enabled: false`: no `MultipartResolver` exists. No route accepts multipart |
+| R-22 | `FormContentFilter` reads a whole form body of a PUT/PATCH/DELETE, unbounded, before dispatch | `spring.mvc.formcontent.filter.enabled: false`: no `FormContentFilter` bean |
+| R-23 | `ViewProjector` lets every non-integrity `DataAccessException` escape, so a persistent failure (lost grant, bad SQL) is retried forever, silently, never counted or parked | Amends G: only `TransientDataAccessException` escapes `ViewProjector` (with `TransactionException` in the relay); any other `DataAccessException` is the event's `ProjectionFailure` and counts an attempt. `OutboxRelay` logs one WARN per released chunk, naming only the exception type: `Outbox chunk released without counting an attempt (<SimpleName>)` |
+| R-24 | The `service_role` placeholder is quoted but not escaped | `RiskDatabaseConfiguration` sets it only when the user name matches `^[a-z_][a-z0-9_]{0,62}$`; otherwise it stays unset and Flyway refuses to migrate |
+| R-25 | `markDelivered`'s `locked_by` guard is untested | test only |
+| R-26 | the raw customer number is pinned on evaluate only | test only: view, front-office status and decision |
+| R-27 | `TooManyCitizenships` has no fast test and no order against `CountryInvalid` | test only: catalogue order rows 9, 10, 11 |
+| R-28 | the owner TRUNCATE test accepts any failure | test only: SQLState `P0001` from the append-only function |
+| R-29 | the production role wiring (`spring.flyway.user` ≠ datasource user through `RiskDatabaseConfiguration`) is never exercised | test only: a Spring context with a non-owner datasource user |
+
+**Deferred, recorded:** a fail-closed migration check that the service role is neither the migration
+owner nor a superuser (SR-03a). Every Spring IT today runs Flyway and the service as the same container
+superuser, so the check needs the IT setup moved to a separate role first. Also deferred:
+`server.tomcat.max-swallow-size` and a whole-body read deadline for identified callers (SR-04, low), the
+`Expect: 100-continue` timing, and default privileges for tables added after V5.

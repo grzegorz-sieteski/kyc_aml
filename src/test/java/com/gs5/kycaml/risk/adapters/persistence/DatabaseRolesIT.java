@@ -21,7 +21,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * R-09 and R-17 (stage 6, SR-08, CR-12; decision D-11). Migrations run as the schema owner; the service
@@ -117,8 +116,8 @@ class DatabaseRolesIT extends RiskDatabaseSupport {
     @Test
     @DisplayName("not even the owner can empty the history with TRUNCATE (append-only, BR-29)")
     void shouldRefuseTruncateOfTheHistoryForTheOwner() {
-        assertThatThrownBy(() -> JdbcClient.create(owner).sql("TRUNCATE command.risk_profile_history").update())
-                .as("TRUNCATE bypasses row triggers; a statement trigger must refuse it")
-                .isInstanceOf(RuntimeException.class);
+        assertThat(sqlStateOf("TRUNCATE command.risk_profile_history", owner))
+                .as("R-28: refused by the append-only function (RAISE EXCEPTION, P0001), not by anything else")
+                .isEqualTo("P0001");
     }
 }

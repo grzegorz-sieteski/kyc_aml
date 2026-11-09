@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
@@ -84,6 +85,9 @@ class RiskApiHardeningIT {
 
     @Autowired
     private OutboxRelay relay;
+
+    @Autowired
+    private ApplicationContext context;
 
     private final HttpClient http = HttpClient.newHttpClient();
 
@@ -445,6 +449,60 @@ class RiskApiHardeningIT {
                 assertThat(answer.response().headers().allValues("Cache-Control")).as(answer.body())
                         .anySatisfy(value -> assertThat(value).contains("no-store"));
             }
+        }
+    }
+
+    // ============================================================================ R-21, R-22, R-26
+
+    @Nested
+    @DisplayName("R-21, R-22: nothing reads a body before the caller is identified; R-26: the raw number on every route")
+    class BeforeIdentification {
+
+        @Test
+        @DisplayName("R-21: no multipart resolver exists, so DispatcherServlet parses no part before a handler runs")
+        void shouldHaveNoMultipartResolver() {
+            assertThat(context.getBeansOfType(org.springframework.web.multipart.MultipartResolver.class)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("R-22: no form content filter exists, so no PUT/PATCH/DELETE form body is read before dispatch")
+        void shouldHaveNoFormContentFilter() {
+            assertThat(context.getBeansOfType(org.springframework.web.filter.FormContentFilter.class)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("R-21: nobody identified: a multipart POST with a 2 MB part is a 401, not a 413 from parsing it")
+        void shouldRefuseAnUnidentifiedMultipartPostBeforeParsingIt() throws Exception {
+            var body = "--x\r\nContent-Disposition: form-data; name=\"f\"; filename=\"a\"\r\n\r\n"
+                    + "a".repeat(2 * 1024 * 1024) + "\r\n--x--\r\n";
+            var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port
+                            + "/api/risk-profiles/" + newNumber() + "/evaluations"))
+                    .header("Content-Type", "multipart/form-data; boundary=x")
+                    .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+            var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+
+            assertProblem(new Answer(response.statusCode(), response.body(), response), 401, "caller-not-identified");
+        }
+
+        @Test
+        @DisplayName("R-26: 'C;x' is not 'C' on the compliance view, the front-office status and a decision")
+        void shouldKeepASemicolonOnEveryRoute() throws Exception {
+            var number = evaluatedCustomer();
+            relay.runOnce();
+            var other = number + ";x";
+
+            assertThat(send("GET", "/api/risk-profiles/" + number, HttpRequest.BodyPublishers.noBody()).status())
+                    .isEqualTo(200);
+            assertProblem(send("GET", "/api/risk-profiles/" + other, HttpRequest.BodyPublishers.noBody()), 404,
+                    "customer-not-found");
+            assertProblem(decide(other, decision("FREEZE_ASSETS", "1")), 404, "customer-not-found");
+            assertThat(versionOf(number)).isEqualTo(1L);
+
+            callAs(ActorRole.FRONT_OFFICE);
+            assertThat(send("GET", "/api/risk-profiles/" + number + "/front-office-status",
+                    HttpRequest.BodyPublishers.noBody()).status()).isEqualTo(200);
+            assertProblem(send("GET", "/api/risk-profiles/" + other + "/front-office-status",
+                    HttpRequest.BodyPublishers.noBody()), 404, "customer-not-found");
         }
     }
 }

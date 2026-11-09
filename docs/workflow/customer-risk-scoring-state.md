@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 6 · Status: AWAITING RE-REVIEW (R-01 to R-20 fixed, `./mvnw -B verify` green; independent re-review of the fix not yet run)
+Stage: 4 · Status: IN_PROGRESS (re-review rejected the fix round: R-21 to R-29; stage 3 RED done, developer next)
 Updated: 2026-11-08
 
 ## Source
@@ -233,7 +233,38 @@ as an argument (the tests subclass the resolver through its no-argument construc
 Known, not fixed: `RelayPressureSpike` (not a gated test) fails when run by hand, because it adds the V3
 lease columns again. Local `spring-boot:run` now needs `FLYWAY_USERNAME` and `FLYWAY_PASSWORD` too.
 
-## Next
 
-An independent re-review (code and security, read-only, fresh context) of `66a9642..0b4aabf`. If it
-approves, the module goes to the product owner; identity source and dead-letter handling stay open.
+## Stage 6 re-review of `66a9642..0b4aabf` (2026-11-09): [CHANGES REQUIRED] from both
+
+Both reviewers ran in fresh read-only contexts (interrupted once by an API limit and resumed). The new
+code held against every attack tried: the edge order, `BoundedBody`, strict JSON, the raw customer
+number, the error controller, `Cache-Control`, grants, masking. What failed were **framework defaults
+left switched on**, plus tests that look like proof but are not.
+
+The orchestrator confirmed the critical finding on a running server before acting: an unidentified
+`multipart/form-data` POST with a 2 MB part is answered **413**, not 401, so the body is parsed before
+identification.
+
+| R | From | Severity | Finding |
+|---|---|---|---|
+| R-21 | CR-1, SR-02 | Critical | Multipart parsing (up to 10 MB, written to temp files) before `identify()` on every route |
+| R-22 | SR-01 | Critical | `FormContentFilter` reads a whole PUT/PATCH/DELETE form body, unbounded, before dispatch |
+| R-23 | CR-2 | Warning | Any non-integrity database failure in the projector is released forever, never counted, never logged |
+| R-24 | SR-03b | Warning | `service_role` placeholder quoted but not escaped |
+| R-25 to R-29 | CR-3, 5 to 8 | Warning | Missing proof: `markDelivered` guard, production role wiring, `;` on GET and decision routes, citizenship order, TRUNCATE SQLState |
+
+Design: ADR addendum of 2026-11-09. Deferred and recorded there: a fail-closed migration check that the
+service role is neither owner nor superuser (SR-03a; needs the Spring ITs moved to a separate role
+first), `max-swallow-size`, a body-read deadline for identified callers, `Expect: 100-continue` timing.
+
+## Stage 3 (third round): R-21 to R-29 (2026-11-09)
+
+New: `RiskApiHardeningIT.BeforeIdentification` (no multipart resolver, no form content filter, a 2 MB
+multipart POST is 401, `;` kept on every route), `OutboxFailureVisibilityIT`, `RiskDatabaseConfigurationTest`,
+`ProductionRolesIT`; extended: `OutboxLeaseOwnershipIT` (late success), `EvaluateCustomerRiskCommandParseTest`
+(10/11 citizenships, country before count), `DatabaseRolesIT` (TRUNCATE is `P0001`).
+
+Gate: `check-write-lock.sh red` OK. Failing, each for the reason it names: 7 `RiskDatabaseConfigurationTest`
+cases, 3 `BeforeIdentification` cases, 2 `OutboxFailureVisibilityIT` cases. Passing by design (test-only
+items R-25 to R-29, the code already does it): the new ownership, citizenship, TRUNCATE, production-role
+and raw-number tests.

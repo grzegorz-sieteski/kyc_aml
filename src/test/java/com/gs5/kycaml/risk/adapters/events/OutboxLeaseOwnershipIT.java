@@ -60,4 +60,48 @@ class OutboxLeaseOwnershipIT extends RelaySupport {
         assertThat(outboxWhere("attempts > 0"))
                 .as("the late relay's failure must not be counted on a row it no longer owns").isZero();
     }
+
+    /** R-25: waits until released, then projects normally (a success). */
+    private final class LateSucceedingProjector extends ViewProjector {
+        final CountDownLatch entered = new CountDownLatch(1);
+        final CountDownLatch release = new CountDownLatch(1);
+
+        LateSucceedingProjector(Rig rig) {
+            super(rig.jdbc, json, rig.tx, clockAt(NOW));
+        }
+
+        @Override
+        public Result<Boolean, ProjectionFailure> project(Projection projection) {
+            entered.countDown();
+            OutboxLeaseClaimIT.await(release);
+            return super.project(projection);
+        }
+    }
+
+    @Test
+    @DisplayName("R-25: a relay that lost its lease does not mark delivered again: it reports 0 and keeps the rescuer's time")
+    void shouldNotMarkDeliveredARowItNoLongerOwns() throws Exception {
+        seed(1, 1);
+        var late = new Rig();
+        var lateProjector = new LateSucceedingProjector(late);
+        var rescuer = new Rig();
+        var lateRelay = new OutboxRelay(late.jdbc, lateProjector, late.tx, clockAt(NOW.plusSeconds(3_600)), 100, 2,
+                LONG_LEASE);
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var lateRound = executor.submit(lateRelay::runOnce);
+            assertThat(lateProjector.entered.await(10, TimeUnit.SECONDS)).isTrue();
+
+            expireAllLeases();
+            assertThat(rescuer.relay(rescuer.projector(), 100, 2, LONG_LEASE).runOnce()).isEqualTo(1);
+            var deliveredAt = jdbc.sql("SELECT delivered_at FROM command.outbox")
+                    .query(java.time.OffsetDateTime.class).single();
+
+            lateProjector.release.countDown();
+            assertThat(lateRound.get(30, TimeUnit.SECONDS))
+                    .as("the late relay delivered nothing it still owned").isZero();
+            assertThat(jdbc.sql("SELECT delivered_at FROM command.outbox").query(java.time.OffsetDateTime.class).single())
+                    .as("the rescuer's delivery time stands").isEqualTo(deliveredAt);
+        }
+    }
 }
