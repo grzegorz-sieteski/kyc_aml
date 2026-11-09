@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -25,7 +26,8 @@ import java.util.regex.Pattern;
  * any of those would reach roles other than the service's, and V5 never runs again to undo it.
  *
  * <p>Any {@code service_role} placeholder configured elsewhere (for example
- * {@code spring.flyway.placeholders.service_role}) is always removed first, so it is never trusted;
+ * {@code spring.flyway.placeholders.service_role}), in any letter case Flyway would match (R-31), is
+ * always removed first, so it is never trusted;
  * any other user name leaves the placeholder unset, and Flyway refuses to migrate. Flyway 12's
  * {@code FluentConfiguration.placeholders(Map)} replaces the whole map (it assigns the field), which is
  * what makes the removal take effect.
@@ -52,7 +54,7 @@ class RiskDatabaseConfiguration {
     FlywayConfigurationCustomizer serviceRolePlaceholder(JdbcConnectionDetails service) {
         return configuration -> {
             var placeholders = new HashMap<>(configuration.getPlaceholders());
-            placeholders.remove(SERVICE_ROLE_PLACEHOLDER);
+            placeholders.keySet().removeIf(RiskDatabaseConfiguration::readAsServiceRole);
             // No user on the connection, or one that is not an acceptable role name, leaves the
             // placeholder unset, and Flyway refuses to migrate.
             Optional.ofNullable(service.getUsername())
@@ -60,6 +62,17 @@ class RiskDatabaseConfiguration {
                     .ifPresent(role -> placeholders.put(SERVICE_ROLE_PLACEHOLDER, role));
             configuration.placeholders(placeholders);
         };
+    }
+
+    /**
+     * R-31: Flyway 12 looks placeholders up in a {@code CaseInsensitiveMap} that folds names with the
+     * default-locale {@code toLowerCase()}, so a key such as {@code SERVICE_ROLE} would still be read as
+     * {@code service_role}. Every key that any of those foldings could turn into the name is removed.
+     */
+    private static boolean readAsServiceRole(String key) {
+        return key.equalsIgnoreCase(SERVICE_ROLE_PLACEHOLDER)
+                || key.toLowerCase(Locale.ROOT).equals(SERVICE_ROLE_PLACEHOLDER)
+                || key.toLowerCase(Locale.getDefault()).equals(SERVICE_ROLE_PLACEHOLDER);
     }
 
     private static boolean isAcceptableServiceRole(String role) {
