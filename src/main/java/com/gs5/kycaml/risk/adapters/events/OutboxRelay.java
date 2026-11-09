@@ -2,6 +2,8 @@ package com.gs5.kycaml.risk.adapters.events;
 
 import com.gs5.kycaml.risk.adapters.projection.Projection;
 import com.gs5.kycaml.risk.adapters.projection.ViewProjector;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.TransactionException;
@@ -30,13 +32,15 @@ import java.util.stream.IntStream;
  * transaction on one connection, never waiting for a second.
  *
  * <p>A chunk that cannot run for a reason that is not the event's own (the pool timed out, a lock or
- * query timed out, a deadlock, the commit failed) rolls back, counts nothing and gives its rows back
- * at once. A row whose own projection fails counts an attempt, keeps its lease as a pause, and stops
+ * query timed out, a deadlock, the commit failed) rolls back, counts nothing, gives its rows back at
+ * once and logs one WARN naming only the exception type (R-23). A row whose own projection fails counts an attempt, keeps its lease as a pause, and stops
  * being claimed after {@value #MAX_ATTEMPTS} attempts. A relay that dies leaves leases that run out;
  * nothing is lost. A relay only ever marks or counts rows it still holds, so a relay whose lease was
  * taken over changes nothing on them.
  */
 public class OutboxRelay {
+
+    private static final Logger LOG = LoggerFactory.getLogger(OutboxRelay.class);
 
     /** A row that failed this often is left pending but no longer claimed, so it cannot starve the rest. */
     private static final int MAX_ATTEMPTS = 10;
@@ -132,6 +136,10 @@ public class OutboxRelay {
         try {
             return Optional.ofNullable(transaction.execute(unused -> projectAndMark(chunk))).orElse(0);
         } catch (TransactionException | DataAccessException notTheEventsFault) {
+            // R-23: a release counts nothing, so it must at least be seen. Only the exception type is
+            // logged: its message can carry SQL parameters, and with them a customer number.
+            LOG.warn("Outbox chunk released without counting an attempt ({})",
+                    notTheEventsFault.getClass().getSimpleName());
             release(chunk);
             return 0;
         }

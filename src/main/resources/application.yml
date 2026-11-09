@@ -22,6 +22,19 @@ spring:
     user: ${FLYWAY_USERNAME}
     password: ${FLYWAY_PASSWORD}
 
+  # No route accepts multipart (R-21). Without a MultipartResolver, DispatcherServlet parses no part
+  # before a handler runs, so an unidentified caller cannot make the service read and store a body.
+  servlet:
+    multipart:
+      enabled: false
+
+  # No FormContentFilter (R-22): it would read a whole PUT/PATCH/DELETE form body, unbounded, before
+  # dispatch and so before identification. No route accepts a form body.
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
+
   # Spring Boot 4 reads the error settings here; server.error.* is no longer bound. The answer itself
   # comes from ContainerErrorResource, which never includes any of these (R-08): this is a second guard.
   web:
