@@ -31,6 +31,11 @@ import java.util.regex.Pattern;
  * any other user name leaves the placeholder unset, and Flyway refuses to migrate. Flyway 12's
  * {@code FluentConfiguration.placeholders(Map)} replaces the whole map (it assigns the field), which is
  * what makes the removal take effect.
+ *
+ * <p>Cleaning the map is not enough while the placeholder syntax stays configurable: a suffix of
+ * <code>_role&#125;</code> would make Flyway read {@code ${service_role}} in V5 as the name {@code service}.
+ * So the customizer always pins the prefix to <code>$&#123;</code>, the suffix to <code>&#125;</code> and
+ * replacement on, whatever the configuration says and whether or not the user is accepted (R-32).
  */
 @Configuration
 class RiskDatabaseConfiguration {
@@ -50,9 +55,21 @@ class RiskDatabaseConfiguration {
     /** The prefix PostgreSQL reserves for its built-in roles, such as {@code pg_write_all_data}. */
     static final String RESERVED_ROLE_PREFIX = "pg_";
 
+    /** R-32: the placeholder prefix V5 is written with, pinned whatever the configuration says. */
+    static final String PLACEHOLDER_PREFIX = "${";
+
+    /** R-32: the placeholder suffix V5 is written with, pinned whatever the configuration says. */
+    static final String PLACEHOLDER_SUFFIX = "}";
+
+    /** R-32: replacement stays on, so V5 never runs with the placeholder text left in place. */
+    static final boolean PLACEHOLDER_REPLACEMENT = true;
+
     @Bean
     FlywayConfigurationCustomizer serviceRolePlaceholder(JdbcConnectionDetails service) {
         return configuration -> {
+            configuration.placeholderPrefix(PLACEHOLDER_PREFIX)
+                    .placeholderSuffix(PLACEHOLDER_SUFFIX)
+                    .placeholderReplacement(PLACEHOLDER_REPLACEMENT);
             var placeholders = new HashMap<>(configuration.getPlaceholders());
             placeholders.keySet().removeIf(RiskDatabaseConfiguration::readAsServiceRole);
             // No user on the connection, or one that is not an acceptable role name, leaves the
