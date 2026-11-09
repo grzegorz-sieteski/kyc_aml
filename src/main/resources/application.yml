@@ -35,6 +35,20 @@ spring:
       filter:
         enabled: false
 
+  # The identity source (D-13, design addendum 2026-11-09 (3)): JWT bearer tokens of the bank's identity
+  # provider. No defaults: a missing value must fail startup, never fall back to a guessed issuer or key set.
+  # The keys come from jwk-set-uri, so the issuer is only validated, never used for discovery at startup.
+  # For Entra ID: ISSUER_URI https://login.microsoftonline.com/<tenant>/v2.0, TOKEN_AUDIENCE the app's
+  # client id or App ID URI, JWK_SET_URI https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ISSUER_URI}
+          audiences: ${TOKEN_AUDIENCE}
+          jwk-set-uri: ${JWK_SET_URI}
+          jws-algorithms: RS256
+
   # Spring Boot 4 reads the error settings here; server.error.* is no longer bound. The answer itself
   # comes from ContainerErrorResource, which never includes any of these (R-08): this is a second guard.
   web:
@@ -44,6 +58,13 @@ spring:
       include-path: never
 
 app:
+  # Which token claims name the caller (D-14): configuration, so the identity provider's setup can change
+  # without a release. The defaults are the Entra ID names; each role's value is exactly an ActorRole name.
+  identity:
+    actor-claim: oid
+    role-claim: roles
+    booking-centre-claim: booking_centre
+
   outbox:
     relay:
       batch-size: 100

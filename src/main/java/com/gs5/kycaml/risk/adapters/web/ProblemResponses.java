@@ -19,6 +19,8 @@ import java.net.URI;
 final class ProblemResponses {
 
     private static final String TYPE_PREFIX = "urn:problem-type:risk:";
+    private static final String NOT_IDENTIFIED = "caller-not-identified";
+    private static final String NOT_IDENTIFIED_DETAIL = "The caller could not be identified.";
 
     private ProblemResponses() {
     }
@@ -39,7 +41,7 @@ final class ProblemResponses {
 
     /** BR-01: the caller is not identified, which includes a caller of an unconfigured booking centre. */
     static ResponseEntity<Object> notIdentified(String instance) {
-        return of(HttpStatus.UNAUTHORIZED, "caller-not-identified", "The caller could not be identified.", instance);
+        return of(HttpStatus.UNAUTHORIZED, NOT_IDENTIFIED, NOT_IDENTIFIED_DETAIL, instance);
     }
 
     /** The one mapping of a body refused before any field was read (D-09, D-12). */
@@ -53,13 +55,26 @@ final class ProblemResponses {
     }
 
     static ResponseEntity<Object> of(HttpStatus status, String code, String detail, String instance) {
+        return ResponseEntity.status(status)
+                .cacheControl(CacheControl.noStore())
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem(status, code, detail, instance));
+    }
+
+    /**
+     * The BR-01 problem body alone, for the one answer written outside a resource: a request whose bearer
+     * token the resource server refused ({@link CallerNotIdentifiedAnswer}). Same body as
+     * {@link #notIdentified}.
+     */
+    static ProblemDetail notIdentifiedProblem(String instance) {
+        return problem(HttpStatus.UNAUTHORIZED, NOT_IDENTIFIED, NOT_IDENTIFIED_DETAIL, instance);
+    }
+
+    private static ProblemDetail problem(HttpStatus status, String code, String detail, String instance) {
         var problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setType(URI.create(TYPE_PREFIX + code));
         problem.setTitle(status.getReasonPhrase());
         problem.setInstance(URI.create(instance));
-        return ResponseEntity.status(status)
-                .cacheControl(CacheControl.noStore())
-                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-                .body(problem);
+        return problem;
     }
 }
