@@ -35,11 +35,15 @@ spring:
       filter:
         enabled: false
 
-  # The identity source (D-13, design addendum 2026-11-09 (3)): JWT bearer tokens of the bank's identity
-  # provider. No defaults: a missing value must fail startup, never fall back to a guessed issuer or key set.
-  # The keys come from jwk-set-uri, so the issuer is only validated, never used for discovery at startup.
-  # For Entra ID: ISSUER_URI https://login.microsoftonline.com/<tenant>/v2.0, TOKEN_AUDIENCE the app's
-  # client id or App ID URI, JWK_SET_URI https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys.
+  # The identity source (D-13, design addenda 2026-11-09 (3) and (4)): JWT bearer tokens of the bank's
+  # identity provider. No defaults: a missing or blank value stops startup (I-01), it never falls back to a
+  # guessed issuer or key set. The keys come from jwk-set-uri, so the issuer is only validated, never used
+  # for discovery at startup.
+  # For Entra ID: ISSUER_URI https://login.microsoftonline.com/<tenant>/v2.0 and
+  # JWK_SET_URI https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys. With the v2.0 issuer the
+  # token's aud is the application (client) id, a GUID, so TOKEN_AUDIENCE is that GUID, not the App ID URI.
+  # Deployment requirement: the API's app registration has "accessTokenAcceptedVersion": 2 in its manifest;
+  # otherwise Entra issues v1.0 tokens, whose issuer (https://sts.windows.net/<tenant>/) is refused here.
   security:
     oauth2:
       resourceserver:
@@ -78,3 +82,6 @@ app:
 logging:
   level:
     org.springframework.jdbc.core: INFO
+    # Pinned (I-08): at DEBUG Spring Security logs request paths, which carry customer numbers (BR-43),
+    # and the reason a token was refused. Do not lower it.
+    org.springframework.security: INFO
