@@ -697,3 +697,28 @@ mapping live in `risk/adapters/web` (or `risk/adapters/config` for the chain); n
 - **Shipped settings are pinned by a test** (`ProductionIdentitySettingsTest`): the ITs set issuer, audience
   and keys themselves, so only this test notices if `application.yml` loses `audiences`.
 - `check-write-lock.sh red` checks Surefire only; a RED round made of `*IT` alone cannot pass it.
+
+---
+
+## Addendum 2026-11-09 (4): identity review findings (I-01 to I-10)
+
+Source: the stage 6 code and security reviews of `7bfb1cd..63e6fda`, both `[CHANGES REQUIRED]`.
+
+| I | Finding | Design |
+|---|---|---|
+| I-01 | An empty `ISSUER_URI`, `TOKEN_AUDIENCE` or `JWK_SET_URI` starts the service with that check absent (Boot adds the issuer and audience validators only for non-empty values; an empty JWK set URI falls back to issuer discovery) | Startup fails when any of the three is missing **or blank** (validated configuration properties). In depth, one extra token validator refuses every token unless the issuer is configured and equal, the audience list is non-empty and intersects, and `exp` is present |
+| I-02 | A token without `exp` is accepted (`JwtTimestampValidator` allows it) | Covered by the validator of I-01: `exp` is required |
+| I-03 | The firewall also refuses `%25`, `%2E` and U+2028/U+2029 in a customer number, which BR-06 allows and the resources answered before | Four more allowances (encoded percent, period, line separator, paragraph separator). The earlier note "exactly those three" is replaced: the firewall allows exactly what BR-06 needs, and still refuses `//`, `\\`, `%2F`, `%00`, traversal |
+| I-04 | Two distinguishable 401s: the filter's (instance `/api/risk-profiles`, `WWW-Authenticate`) and the resources' (route instance, no header) reveal whether a token passed validation | Every caller-not-identified answer is byte-identical: instance `/api/risk-profiles`, `WWW-Authenticate: Bearer`, `no-store`, on all four routes and from the filter |
+| I-05 | JWK set unreachable: a request with a token ends as 500 | D-13: anything else is not identified. The answer is the same constant 401; one WARN per occurrence names only the exception type. No token, URL or message in the log |
+| I-06 | Every token with an unknown `kid` forces an outbound JWK set fetch at the caller's rate | The decoder's key source is rate limited (Nimbus `JWKSourceBuilder` with rate limiting on) with short connect and read timeouts; an unknown `kid` inside the limit window is the constant 401 |
+| I-07 | `GET /.well-known/oauth-protected-resource/**` (Spring Security 7.1, no off switch) reflects host and path and claims mTLS-bound tokens | Answered by the constant 404 `request-not-handled`, like any unknown path, before Spring Security's metadata filter |
+| I-08 | DEBUG on `org.springframework.security` would log request paths (customer numbers) and validation detail | `logging.level.org.springframework.security: INFO` pinned in `application.yml` and by `ProductionIdentitySettingsTest`; ban recorded in AGENTS.md |
+| I-09 | Lines no test protects: a non-string element among the roles, `/logout`, a nested claim object | tests only |
+| I-10 | The comment says the audience is "the client id or App ID URI"; with the v2.0 issuer Entra puts the client id GUID in `aud` | comment corrected; `accessTokenAcceptedVersion: 2` noted as a deployment requirement |
+
+**Open for the product owner (not in this round):** how the onboarding *system* is identified. It will use
+app-only (client-credentials) tokens, and Entra emits directory-extension claims for users only, so such a
+token may carry no booking centre. Also whether ID tokens must be told apart from access tokens when a
+client and the API share one app registration, and who may write the directory attribute behind the
+booking-centre claim.

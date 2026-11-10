@@ -38,4 +38,10 @@ class ProductionIdentitySettingsTest {
     void shouldAcceptRs256Only() throws IOException {
         assertThat(shipped(JWT + "jws-algorithms")).isEqualTo("RS256");
     }
+
+    @Test
+    @DisplayName("I-08: Spring Security logs at INFO: DEBUG would print request paths, which carry customer numbers")
+    void shouldPinSpringSecurityLoggingToInfo() throws IOException {
+        assertThat(String.valueOf(shipped("logging.level.org.springframework.security"))).isEqualTo("INFO");
+    }
 }

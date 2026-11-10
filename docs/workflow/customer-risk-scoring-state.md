@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 6 · Status: IN REVIEW (identity source implemented, `./mvnw -B verify` green; code and security review running)
+Stage: 4 · Status: IN_PROGRESS (identity reviews rejected: I-01 to I-10; RED done, developer next)
 Updated: 2026-11-08
 
 ## Source
@@ -371,3 +371,20 @@ now pins the shipped settings and fails under that mutation.
 
 Developer's deviations, recorded in the ADR: three firewall allowances (`;`, encoded CR, LF) so BR-06 keeps
 being answered by the resources; Spring Security's `/.well-known/oauth-protected-resource` endpoint exists.
+
+## Identity reviews (2026-11-09): [CHANGES REQUIRED] from both; stage 3 for I-01 to I-10
+
+Both reviews agree on the critical one: an identity setting that is present but empty starts the service
+with the issuer or audience check missing (I-01). Also: the firewall still refused `%25`, `%2E`, U+2028 and
+U+2029 that BR-06 allows (I-03); two distinguishable 401s (I-04); a 500 when the key set is unreachable
+(I-05); one outbound key fetch per unknown `kid` (I-06); Spring Security's metadata endpoint reflecting host
+and path (I-07); a token without `exp` accepted (I-02). Design: ADR addendum 2026-11-09 (4).
+
+Stage 3 run (`verify` with failures ignored): Surefire 346, 1 failure; Failsafe 208, 14 failures, each a new
+case failing for the reason it names: startup with an empty setting succeeds (3), firewall 400 (4),
+unequal 401s (2), metadata endpoint served (2), no `exp` accepted (1), 25 fetches for 25 unknown key ids
+(1), 500 with keys unreachable (1), logging level unpinned (1). Already passing guards: `/logout`,
+`/login`, a non-text role element, a nested claim object.
+
+Open for the product owner, recorded in the ADR: how the onboarding system's app-only tokens carry a
+booking centre; ID tokens versus access tokens; who may write the booking-centre attribute.

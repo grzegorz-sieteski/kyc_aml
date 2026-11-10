@@ -505,4 +505,27 @@ class RiskApiHardeningIT {
                     HttpRequest.BodyPublishers.noBody()), 404, "customer-not-found");
         }
     }
+
+    // ============================================================================ I-03
+
+    @Nested
+    @DisplayName("I-03: the HTTP firewall refuses nothing that BR-06 allows in a customer number")
+    class Firewall {
+
+        @ParameterizedTest(name = "{0}")
+        @org.junit.jupiter.params.provider.CsvSource({
+                "C-PCT-%2550, C-PCT-%50",
+                "C-DOT-%2E1, C-DOT-.1",
+                "C-LS-%E2%80%A8x, C-LS-\u2028x",
+                "C-PS-%E2%80%A9x, C-PS-\u2029x"})
+        @DisplayName("an encoded percent, period, line separator or paragraph separator is part of the number")
+        void shouldLetTheResourceDecide(String rawPath, String expectedNumber) throws Exception {
+            callAs(ActorRole.ONBOARDING_SYSTEM);
+
+            var answer = evaluate(rawPath, customer());
+
+            assertThat(answer.status()).as(answer.body()).isEqualTo(200);
+            assertThat(versionOf(expectedNumber)).isEqualTo(1L);
+        }
+    }
 }

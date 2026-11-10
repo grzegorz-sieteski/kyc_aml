@@ -35,6 +35,8 @@ final class TestTokens {
 
     final KeyPair keys;
     final String kid;
+    /** How many times the served JWK set was fetched. */
+    final java.util.concurrent.atomic.AtomicInteger fetches = new java.util.concurrent.atomic.AtomicInteger();
 
     private TestTokens(KeyPair keys, String kid) {
         this.keys = keys;
@@ -110,6 +112,7 @@ final class TestTokens {
             var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             var body = jwks().getBytes(StandardCharsets.UTF_8);
             server.createContext("/keys", exchange -> {
+                fetches.incrementAndGet();
                 exchange.getResponseHeaders().add("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, body.length);
                 try (var out = exchange.getResponseBody()) {

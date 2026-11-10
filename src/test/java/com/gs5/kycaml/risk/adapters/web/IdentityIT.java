@@ -176,7 +176,9 @@ class IdentityIT {
                 Arguments.of("booking centre not in scope (D-16)", signed.apply(c -> with(c, "booking_centre", TestTokens.OUT_OF_SCOPE_CENTRE))),
                 Arguments.of("no actor", signed.apply(c -> without(c, "oid"))),
                 Arguments.of("blank actor", signed.apply(c -> with(c, "oid", "  "))),
-                Arguments.of("actor of the wrong type", signed.apply(c -> with(c, "oid", 42))));
+                Arguments.of("actor of the wrong type", signed.apply(c -> with(c, "oid", 42))),
+                Arguments.of("no expiry (I-02)", signed.apply(c -> without(c, "exp"))),
+                Arguments.of("a non-text element among the roles (I-09)", signed.apply(c -> with(c, "roles", List.of("MLRO", 7)))));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -225,5 +227,72 @@ class IdentityIT {
         var copy = new HashMap<>(claims);
         copy.remove(name);
         return copy;
+    }
+
+    // ------------------------------------------------------------------ review round I-01 to I-10
+
+    private static String everythingOf(HttpResponse<String> response) {
+        return response.statusCode() + " | " + response.headers().firstValue("Content-Type").orElse("-") + " | "
+                + response.headers().allValues("WWW-Authenticate") + " | "
+                + response.headers().allValues("Cache-Control") + " | " + response.body();
+    }
+
+    @Test
+    @DisplayName("I-04: every 'not identified' answer is identical: no token, a broken token, valid token with unusable claims")
+    void shouldAnswerEveryNotIdentifiedCaseIdentically() throws Exception {
+        var twoRoles = TestTokens.claims("MLRO");
+        twoRoles.put("roles", List.of("MLRO", "AML_ANALYST_L1"));
+
+        var noToken = everythingOf(view(null));
+        var garbage = everythingOf(view("not-a-jwt"));
+        var forged = everythingOf(view(STRANGER.sign(TestTokens.claims("MLRO"))));
+        var unusableClaims = everythingOf(view(KEYS.sign(twoRoles)));
+
+        assertThat(noToken).contains("401").contains("[Bearer]").contains("\"instance\":\"/api/risk-profiles\"");
+        assertThat(garbage).isEqualTo(noToken);
+        assertThat(forged).isEqualTo(noToken);
+        assertThat(unusableClaims).isEqualTo(noToken);
+    }
+
+    @Test
+    @DisplayName("I-04: the same identical answer on the other three routes")
+    void shouldAnswerNotIdentifiedIdenticallyOnEveryRoute() throws Exception {
+        var expected = everythingOf(view(null));
+
+        assertThat(everythingOf(send("GET", "/api/risk-profiles/C-ID-X/front-office-status", null, null, null)))
+                .isEqualTo(expected);
+        assertThat(everythingOf(send("POST", "/api/risk-profiles/C-ID-X/evaluations", null, "application/json", "{}")))
+                .isEqualTo(expected);
+        assertThat(everythingOf(send("POST", "/api/risk-profiles/C-ID-X/decisions", "not-a-jwt", "application/json", "{}")))
+                .isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("I-06: tokens with unknown key ids do not make the service fetch the key set at the caller's rate")
+    void shouldNotFetchTheKeySetForEveryUnknownKeyId() throws Exception {
+        assertThat(view(KEYS.sign(TestTokens.claims("MLRO"))).statusCode()).isEqualTo(404);
+        var before = KEYS.fetches.get();
+
+        for (var i = 0; i < 25; i++) {
+            var token = STRANGER.sign(Map.of("alg", "RS256", "typ", "JWT", "kid", "unknown-" + i),
+                    TestTokens.claims("MLRO"));
+            assertNotIdentified(view(token));
+        }
+
+        assertThat(KEYS.fetches.get() - before).as("outbound key set fetches caused by 25 unknown key ids")
+                .isLessThanOrEqualTo(2);
+        assertThat(view(KEYS.sign(TestTokens.claims("MLRO"))).statusCode()).as("known keys keep working").isEqualTo(404);
+    }
+
+    @ParameterizedTest(name = "GET {0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"/.well-known/oauth-protected-resource",
+            "/.well-known/oauth-protected-resource/api/risk-profiles/C-ID-SECRET", "/logout", "/login"})
+    @DisplayName("I-07, I-09: Spring Security's own endpoints do not exist here: the constant 404")
+    void shouldNotServeSpringSecurityEndpoints(String path) throws Exception {
+        var response = send("GET", path, null, null, null);
+
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(404);
+        assertThat(response.body()).contains("urn:problem-type:risk:request-not-handled")
+                .doesNotContain("resource").doesNotContain("localhost").doesNotContain("C-ID-SECRET");
     }
 }

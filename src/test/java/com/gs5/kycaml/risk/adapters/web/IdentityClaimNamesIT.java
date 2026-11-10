@@ -75,4 +75,18 @@ class IdentityClaimNamesIT {
     void shouldNotFallBackToTheDefaultNames() throws Exception {
         assertThat(statusFor(KEYS.sign(TestTokens.claims("AML_ANALYST_L2")))).isEqualTo(401);
     }
+
+    @Test
+    @DisplayName("I-09: a claim name is a literal key, not a path: a nested object under 'extn' identifies nobody")
+    void shouldNotFollowADottedNameIntoANestedObject() throws Exception {
+        var claims = TestTokens.claims("AML_ANALYST_L2");
+        claims.remove("oid");
+        claims.remove("roles");
+        claims.remove("booking_centre");
+        claims.put("sub", "actor-sub-1");
+        claims.put("app_roles", List.of("AML_ANALYST_L2"));
+        claims.put("extn", java.util.Map.of("bookingCentre", TestTokens.DE_CENTRE));
+
+        assertThat(statusFor(KEYS.sign(claims))).isEqualTo(401);
+    }
 }
