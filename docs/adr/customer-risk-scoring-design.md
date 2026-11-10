@@ -722,3 +722,14 @@ app-only (client-credentials) tokens, and Entra emits directory-extension claims
 token may carry no booking centre. Also whether ID tokens must be told apart from access tokens when a
 client and the API share one app registration, and who may write the directory attribute behind the
 booking-centre claim.
+
+### Recorded after stage 4 (identity round 2)
+
+- I-05: the WARN names the root cause's type (for example `ConnectException`); the outer type would always
+  be the same. A refresh refused by the rate limiter is an ordinary invalid token: constant 401, no WARN,
+  so a caller cannot write a log line per request.
+- I-06: Nimbus lets up to two fetches through per 30 s window. Connect and read timeouts are 2 s, constants
+  in code. The fetch uses `HttpURLConnection`, so it follows the JVM proxy properties.
+- I-07: the 404 filter is registered after `HeaderWriterFilter`, which puts it ahead of Spring Security's
+  metadata filter; that filter has no registered order to refer to.
+- Exercised for I-05: connection refused only. A read timeout or a malformed key set takes the same path, untested.

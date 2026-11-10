@@ -144,6 +144,12 @@ Be honest about this, because the distinction matters:
   Spring JDBC translate PostgreSQL errors by error code, so a lock timeout is transient and the outbox
   relay does not count it as a failed attempt. Deleting it breaks `OutboxTransientFailureIT`. When you
   test such a removal, delete the copy in `target/classes` too: `verify` without `clean` keeps it.
+- **Never set DEBUG or TRACE on `org.springframework.security`.** It logs request paths, which carry
+  customer numbers, and token validation detail (BR-43). `application.yml` pins it to INFO and
+  `ProductionIdentitySettingsTest` fails if that line goes.
+- An identity setting that is present but empty stops startup (`IdentitySettings`). Left to Spring Boot, an
+  empty issuer or audience silently drops that check. Entra: the audience is the app's client id GUID, and
+  the app registration needs `accessTokenAcceptedVersion: 2`.
 - **Never enable `spring.mvc.log-request-details`** together with DEBUG on `org.springframework.web`:
   `DispatcherServlet` would then read and log form bodies before the caller is identified (BR-01, BR-43).
 - **Deployment controls for D-11 (not enforced in code):** `FLYWAY_USERNAME` must differ from

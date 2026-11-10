@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 4 · Status: IN_PROGRESS (identity reviews rejected: I-01 to I-10; RED done, developer next)
+Stage: 6 · Status: IN REVIEW (I-01 to I-10 fixed, `./mvnw -B verify` green; re-review running)
 Updated: 2026-11-08
 
 ## Source
@@ -388,3 +388,9 @@ unequal 401s (2), metadata endpoint served (2), no `exp` accepted (1), 25 fetche
 
 Open for the product owner, recorded in the ADR: how the onboarding system's app-only tokens carry a
 booking centre; ID tokens versus access tokens; who may write the booking-centre attribute.
+
+## Identity round 2: stage 4 done (2026-11-10)
+
+`src/main/` only. Orchestrator's GREEN gate: src/test and docs untouched; 0 Checkstyle violations; Surefire
+346, Failsafe 208, 0 failures; BUILD SUCCESS. Developer's choices are recorded in the ADR. Docker had to be
+restarted by hand after a container restart left a stale containerd pid.
