@@ -422,3 +422,11 @@ the flood case); mutual TLS does not reject an unregistered certificate from a t
 fetch; the default outage window is 50 min, not 300 s; the BFF logs refusal codes against BR-43. The
 verdict and the test list are in the audit banner at the top of `docs/adr/bff-boundary-v2.md`. No code
 is authorised. Next: a third draft fixing the four blockers, then a further audit.
+
+## BFF boundary ADR v3: third audit, `[CHANGES REQUIRED]`, one blocker (2026-11-11)
+
+v2's four blockers are fixed in mechanism and verified in the Nimbus, Spring Security and Tomcat bytecode.
+One new blocker: a concurrency race in `LastKnownKeySetSource.remember` can stretch the D-21 window. Ten
+warnings, mostly test planning (mutual TLS in the ITs, clock control) and precision (exactly one role for
+onboarding, the outage WARN, map keys, certificate binding). Summary in the banner of
+`docs/adr/bff-boundary-v3.md`. Next: v4 fixing the blocker and warnings, then an audit.

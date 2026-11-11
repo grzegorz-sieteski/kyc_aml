@@ -1,5 +1,17 @@
 # ADR: Backend-for-frontend boundary, third draft (v3)
 
+> **Audit 2026-11-11 (third): `[CHANGES REQUIRED]`, one blocker. Do not implement yet.** All four blockers of
+> v2 are fixed in mechanism (checked in bytecode). Blocker: a race in `LastKnownKeySetSource.remember` (it
+> stamps the request time and compares set identity, out of order across threads) can extend the 300 s
+> window by up to the cache TTL and can serve a replaced set; record fetches where they happen (a recorder
+> between the cache and the rate limiter, `fetchedAt` only moving forward) and add a concurrency test.
+> Warnings: the onboarding branch must require exactly one role (D-15); an identity-provider outage is no
+> longer logged (I-05 WARN, also when no fetch ever succeeded); GUID client ids cannot be map keys from
+> environment variables; mutual TLS breaks every existing IT unless test certificates are planned; the top
+> key source reads the system clock, so tests 1-3 cannot set time through it; `<= 300s` allows a smaller
+> window than decided; bind certificates by issuer and subject or key pin, and TLS must end at Tomcat;
+> `jws-algorithms` becomes unread; increment scope is both decided and asked.
+
 > Replaces `docs/adr/bff-boundary-v2.md`, audited on 2026-11-11 as `[CHANGES REQUIRED]` with four blockers. v2 and the first draft stay as the audit record. Everything in v2 the audit did not fault is kept here; what changed is listed in section 1.
 
 - **Mode:** `@architect`, design mode, stage 2.
