@@ -1,5 +1,15 @@
 # ADR: Backend-for-frontend boundary for customer-facing callers
 
+> **Audit 2026-11-11: `[CHANGES REQUIRED]`. Do not implement from this draft.** An independent architect
+> audit found two blockers: (1) accepting only the BFF's calling client locks the onboarding system out, so
+> Evaluate has no caller; (2) mapping the service's 401 to a BFF 503 hides a genuine "caller not identified"
+> (BR-01) and contradicts section 3.3. Further: the sign-in flow is unspecified (does the browser hold a
+> token?), no CSRF or body-before-session rule for the cookie session, no TLS requirement on the BFF to
+> service hop, the calling-client rule is a new identification condition that needs a spec decision, and
+> section 6 names the wrong package and prefix. Confirmed by bytecode: the key lookup runs before claim
+> validation, so the `azp` check cannot close F1. Not verifiable without an Entra tenant: what `azp` holds
+> in an on-behalf-of token, `azpacr`, `scp`, and which claims an app-only token carries.
+
 - **Status:** Proposed. The architect chooses the trust model (section 2). Three product-owner answers are
   needed before any BFF or identity code (section 8).
 - **Date:** 2026-11-11

@@ -406,3 +406,11 @@ restarted by hand after a container restart left a stale containerd pid.
 | Identity: key-fetch trade-off (F1) | onboarding accepted internal-only (D-17); customer-facing via BFF; no code change |
 | Identity: open questions | ID token vs access token; who may write the booking-centre attribute; onboarding's booking centre (app-only tokens may carry no claim) |
 | Deferred technical | startup role check, max-swallow-size, error-code lookup under pool exhaustion, total-score CHECK: recorded in the ADR, not started |
+
+## BFF boundary ADR: audited, `[CHANGES REQUIRED]` (2026-11-11)
+
+Independent architect audit of `docs/adr/bff-boundary.md` (read-only, fresh context): 2 blockers, 9
+warnings. The blockers and the list are summarised at the top of the ADR. Next: product-owner answers
+(sign-in flow, onboarding's identity and booking centre, what a misprovisioned user sees, acceptance of
+internal key-fetch flooding, TLS on the internal hop), a spec decision for the calling-client rule, then
+a second ADR draft. No code is authorised.
