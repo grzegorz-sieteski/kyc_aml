@@ -1,5 +1,18 @@
 # ADR: Backend-for-frontend boundary, fourth draft (v4)
 
+> **Audit 2026-11-11 (fourth): `[CHANGES REQUIRED]`, one blocker. Do not implement.** The race of v3 is fixed
+> in mechanism (recorder at the lock, forward-only stamp; verified in the Nimbus bytecode). Blocker B1: the
+> decision-route log line carries route template and status, which BR-43 forbids for decisions (BR-43 and A-29
+> are confirmed; the line must lose template and status, or the product owner must confirm in writing that a
+> route-level status is not "decision" information). Warnings that would make stage-3 tests wrong: the
+> first-use WARN pair (W1), a test that expects a rate-limited source to refuse at 300 s (W5, Nimbus allows two
+> fetches per 30 s), the sequential variant of the race test (W4), unset environment variables that survive
+> binding as literal text (W6, Boot ignores unresolved placeholders by default), missing micrometer and
+> BouncyCastle (W9, W10: copilot section 0.1 and 0.7 forbid adding dependencies to make an idea work), the
+> forged-header test that cannot fail (W12), nonce count under renewal (W13), and window equality (W14: use
+> strict less-than). Also: the design's deferral of quarantine (design lines 310-311) contradicts D-18 and
+> BR-44 to BR-46, which are in this increment; the release role is an open product-owner question.
+
 > Replaces `docs/adr/bff-boundary-v3.md`, audited 2026-11-11 as `[CHANGES REQUIRED]`: one blocker, ten warnings, all answered in section 1. v2, v3 and the first draft stay as the audit record. "To confirm in the tenant" and "deployment check" mark what only Entra or a running deployment can show. Mechanisms were checked in the jars under `~/.m2` (section 17) unless listed as not checked.
 
 - **Mode:** `@architect`, design mode, stage 2. **Status:** Proposed, 2026-11-11; section 20 lists what the product owner decides.

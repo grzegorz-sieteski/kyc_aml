@@ -430,3 +430,10 @@ One new blocker: a concurrency race in `LastKnownKeySetSource.remember` can stre
 warnings, mostly test planning (mutual TLS in the ITs, clock control) and precision (exactly one role for
 onboarding, the outage WARN, map keys, certificate binding). Summary in the banner of
 `docs/adr/bff-boundary-v3.md`. Next: v4 fixing the blocker and warnings, then an audit.
+
+## BFF boundary ADR v4: fourth audit, `[CHANGES REQUIRED]`, one blocker (2026-11-11)
+
+The v3 race is fixed in mechanism. Blocker B1: decision-route log lines (route template and status) against
+BR-43; needs a product-owner answer or a log change. Warnings are listed in the banner of
+`docs/adr/bff-boundary-v4.md`. Also flagged: the main design defers quarantine (lines 310-311), which
+contradicts D-18 and BR-44 to BR-46. Next: v5 for the blocker and the test and startup warnings, then an audit.
