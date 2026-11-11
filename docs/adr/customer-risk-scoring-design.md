@@ -769,3 +769,14 @@ Firewall negative tests (`RiskApiHardeningIT.Firewall`) for `%2F`, `%5C`, `%00`,
   no oracle. Denial of service through the firewall is not a threat model for this service.
 - **Tomcat refusal of an oversized header block (LOW): accepted.** Same reasoning; no container
   configuration is changed for it. The business code stays the place where requirements are met.
+
+### Decision 2026-11-11 (2): the onboarding system is internal only
+
+Product owner (spec D-17): the onboarding system reaches this service only from the internal network, and
+nothing from the internet can reach it. Its risk classification is therefore lower than the customer-facing
+channels'. Consequence for F1: the key-fetch flood needs a caller who can already reach the internal network,
+and that risk is accepted for onboarding.
+
+This is a **deployment control**, not code: AGENTS.md lists it beside the D-11 controls. It must be enforced
+by the network (no route from outside to this service, or mTLS), and it must be checked at deployment.
+Customer-facing callers keep the BFF direction above.

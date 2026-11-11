@@ -157,5 +157,8 @@ Be honest about this, because the distinction matters:
   `pg_service.conf` `user=`, `options=-c role=` or pool init `SET ROLE` for the service connection; and
   `spring.flyway.locations`, `callback-locations`, `init-sqls`, `jdbc-properties` stay unset. Whoever
   controls `spring.flyway.*` holds the schema owner's power anyway (exhaustive review, 2026-11-09).
+- **Onboarding reaches this service only from the internal network (D-17).** Nothing from the internet may
+  route to it. This is a deployment control, and it is what accepts the key-fetch risk (F1) for onboarding.
+  Customer-facing callers go through the BFF (ADR, decision 2026-11-11).
 - Migrations run as the schema owner (`FLYWAY_USERNAME`), the service as a role that owns nothing
   (`DATABASE_USERNAME`); `V5` grants it its rights through the Flyway placeholder `service_role`.

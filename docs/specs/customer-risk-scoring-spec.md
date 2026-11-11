@@ -29,6 +29,7 @@ owner's answers of 2026-11-07 recorded below.
 | D-14 | 2026-11-09 | The token names the caller's identity, role and booking centre in claims whose names are configured, not fixed in the service, so the identity provider's setup can change without a release. |
 | D-15 | 2026-11-09 | A token must carry exactly one of the five roles of A-02. No role of this service, more than one, or a role name that does not match exactly, is **caller not identified**. |
 | D-16 | 2026-11-09 | The booking centre in the token must be a well-formed booking centre identifier, and one of the booking centres in scope (D-06); otherwise the caller is not identified (BR-01). |
+| D-17 | 2026-11-11 | The onboarding system reaches this service only from the internal network; nothing from the internet can reach it. Its risk classification is therefore lower than that of the customer-facing channels, and the key-fetch risk of an unknown key identifier from outside (F1) is accepted for it. Customer-facing callers go through the backend-for-frontend (ADR, decision 2026-11-11). |
 
 ## Scope
 
