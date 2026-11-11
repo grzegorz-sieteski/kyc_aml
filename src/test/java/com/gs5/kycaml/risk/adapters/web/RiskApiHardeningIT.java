@@ -512,6 +512,25 @@ class RiskApiHardeningIT {
     @DisplayName("I-03: the HTTP firewall refuses nothing that BR-06 allows in a customer number")
     class Firewall {
 
+        @ParameterizedTest(name = "refused: {0}")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {
+                "/api/risk-profiles/C%2FX/evaluations",
+                "/api/risk-profiles/C%5CX/evaluations",
+                "/api/risk-profiles/C%00X/evaluations",
+                "/api/risk-profiles/C%2E%2E%2FX/evaluations",
+                "/api/risk-profiles/..%2FX/evaluations",
+                "/api/risk-profiles//C-X/evaluations",
+                "/api/risk-profiles/C%252F%2E%2E/evaluations"})
+        @DisplayName("I-03: traversal, separators and NUL stay refused by the firewall, never reaching a resource")
+        void shouldStillRefuseTraversalAndSeparators(String path) throws Exception {
+            callAs(ActorRole.ONBOARDING_SYSTEM);
+
+            var answer = post(path, customer());
+
+            assertThat(answer.status()).as(answer.body()).isIn(400, 404);
+            assertThat(answer.body()).doesNotContain("\"status\":200").doesNotContain("customerNumber");
+        }
+
         @ParameterizedTest(name = "{0}")
         @org.junit.jupiter.params.provider.CsvSource({
                 "C-PCT-%2550, C-PCT-%50",

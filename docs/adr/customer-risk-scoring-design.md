@@ -733,3 +733,24 @@ booking-centre claim.
 - I-07: the 404 filter is registered after `HeaderWriterFilter`, which puts it ahead of Spring Security's
   metadata filter; that filter has no registered order to refer to.
 - Exercised for I-05: connection refused only. A read timeout or a malformed key set takes the same path, untested.
+
+### Identity re-review of round 2 (2026-11-11): one trade-off, open for the product owner
+
+Both reviews of `63e6fda..ddd1db1` agree on one finding, F1. The key-fetch budget (Nimbus
+`RateLimitedJWKSetSource`: one fetch per window, global, not per `kid`, 30 s window) is shared by all
+callers. A caller who sends tokens with random unknown `kid`s at about two requests per window keeps the
+budget spent, so a legitimately rotated signing key cannot be fetched for as long as the flood lasts.
+Legitimate callers then get the constant 401, with no log line. This is fail-closed, not a bypass. Keys
+already cached keep verifying until their 300 s TTL.
+
+The trade-off is inherent to the two options: without a limit, every unknown `kid` costs an outbound
+fetch (I-06 fails); with it, rotation can be delayed by a flood. Both reviewers propose keeping the
+last-known key set when a refresh is refused, which still needs a decision (it can serve a revoked key
+for up to the TTL). Not changed in this round; recorded as a known risk until the product owner decides.
+
+Also recorded from the same reviews, accepted as low: a request the firewall refuses gets 400 before any
+identification (the answer does not depend on the token); a header block over Tomcat's limit gets a
+Tomcat 400 before any filter. Both depend only on the request, not on the token, so neither is an oracle.
+
+Firewall negative tests (`RiskApiHardeningIT.Firewall`) for `%2F`, `%5C`, `%00`, `%2E%2E%2F`, `..%2F`,
+`//` and `%252F%2E%2E` pass with the current allowances: they guard against widening.
