@@ -667,7 +667,6 @@ class RelayPressureSpike extends RiskDatabaseSupport {
 
     private void prepareDatabase() {
         freshDatabaseNow();
-        jdbc.sql("ALTER TABLE command.outbox ADD COLUMN locked_until TIMESTAMPTZ, ADD COLUMN locked_by UUID").update();
         evaluateAt(NOW).execute(ONBOARDING_IN_DE, employed("SEED"));
         seedView = jdbc.sql("SELECT view::text FROM command.outbox WHERE customer_number = 'SEED'")
                 .query(String.class).single();
