@@ -31,6 +31,9 @@ owner's answers of 2026-11-07 recorded below.
 | D-16 | 2026-11-09 | The booking centre in the token must be a well-formed booking centre identifier, and one of the booking centres in scope (D-06); otherwise the caller is not identified (BR-01). |
 | D-17 | 2026-11-11 | The onboarding system reaches this service only from the internal network; nothing from the internet can reach it. Its risk classification is therefore lower than that of the customer-facing channels, and the key-fetch risk of an unknown key identifier from outside (F1) is accepted for it. Customer-facing callers go through the backend-for-frontend (ADR, decision 2026-11-11). |
 | D-18 | 2026-11-11 | A risk event that the read side cannot apply after ten attempts is set aside (quarantined) and is not retried automatically. While such an event exists for a customer, the customer's front-office status is **verification pending** (fail-closed). Later events for that customer wait behind it, so that no change is applied out of order. Quarantine is visible to operations (log and metric), and it is released only by a person, after the cause has been fixed, with a record of who released it. |
+| D-19 | 2026-11-11 | A caller is identified also by the application that presents its token. Human roles (the four analyst and officer roles) are accepted only from a user's token issued for the BFF, the only route for people. The onboarding role is accepted only from an application-only token of an onboarding application that is registered in the service's configuration. Its booking centre comes from that registration, never from a token or a request. An application that is not registered is not identified (BR-01). |
+| D-20 | 2026-11-11 | Only the BFF and the onboarding system may open a connection to this service, each with a client certificate (mutual TLS), in addition to the token. TLS is required on every connection to this service. |
+| D-21 | 2026-11-11 | When the service cannot fetch a refreshed set of signing keys, it keeps verifying tokens with the last set it has, for as long as its cache allows. A revoked key therefore stays valid at most until that cache expires. |
 
 ## Scope
 
@@ -110,7 +113,7 @@ with a marker is not confirmed until that assumption is.
 
 | ID | Rule | Condition | Expected outcome / refusal |
 |---|---|---|---|
-| `BR-01` | A caller must be identified before any operation | No caller is known: no valid token for this service (D-13), or the token does not name exactly one identity, one role and one booking centre (D-14, D-15, D-16); or the caller's booking centre is not one of the booking centres in scope (D-06) | Refused: **caller not identified**. Nothing is recorded and nothing is returned |
+| `BR-01` | A caller must be identified before any operation | No caller is known: no valid token for this service (D-13), or the presenting application is not an approved one for the role it asserts (D-19), or the connection is not mutually authenticated (D-20), or the token does not name exactly one identity, one role and one booking centre (D-14, D-15, D-16); or the caller's booking centre is not one of the booking centres in scope (D-06) | Refused: **caller not identified**. Nothing is recorded and nothing is returned |
 | `BR-02` | Each operation, and each kind of compliance decision, is open only to the roles listed for it (A-02) | The caller's role is not listed for the operation or decision | Refused: **role may not perform this operation** |
 | `BR-03` | The role is decided before any input is examined (A-03) | Any operation is attempted | A caller whose role is not permitted learns nothing about whether the input was valid or whether the customer exists |
 | `BR-04` | An operation reaches only risk profiles of the caller's own booking centre (A-04) | The customer number names a profile of another booking centre, or no profile at all | The two cases are indistinguishable to the caller: both are **customer not found** |
@@ -494,6 +497,7 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
 - [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07); A-27 amended on 2026-11-08 (D-08)
+- [x] The identity decisions D-19 to D-21 (2026-11-11) are reflected in BR-01
 - [x] The failure decision D-18 (2026-11-11) is reflected in BR-44 to BR-46
 - [x] The identity decisions D-13 to D-16 (2026-11-09) are reflected in BR-01
 - [x] The stage 6 decisions D-08 to D-12 (2026-11-08) are reflected in BR-01, BR-08, BR-10, BR-12, BR-33, BR-37 and both catalogues
