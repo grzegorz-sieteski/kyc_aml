@@ -30,6 +30,7 @@ owner's answers of 2026-11-07 recorded below.
 | D-15 | 2026-11-09 | A token must carry exactly one of the five roles of A-02. No role of this service, more than one, or a role name that does not match exactly, is **caller not identified**. |
 | D-16 | 2026-11-09 | The booking centre in the token must be a well-formed booking centre identifier, and one of the booking centres in scope (D-06); otherwise the caller is not identified (BR-01). |
 | D-17 | 2026-11-11 | The onboarding system reaches this service only from the internal network; nothing from the internet can reach it. Its risk classification is therefore lower than that of the customer-facing channels, and the key-fetch risk of an unknown key identifier from outside (F1) is accepted for it. Customer-facing callers go through the backend-for-frontend (ADR, decision 2026-11-11). |
+| D-18 | 2026-11-11 | A risk event that the read side cannot apply after ten attempts is set aside (quarantined) and is not retried automatically. While such an event exists for a customer, the customer's front-office status is **verification pending** (fail-closed). Later events for that customer wait behind it, so that no change is applied out of order. Quarantine is visible to operations (log and metric), and it is released only by a person, after the cause has been fixed, with a record of who released it. |
 
 ## Scope
 
@@ -355,6 +356,16 @@ nothing else.
 Refusals: caller not identified (BR-01); customer not found (BR-04). Neither refusal refers to risk
 (BR-41).
 
+### Failure handling (D-18)
+
+| ID | Rule | Condition | Expected outcome |
+|---|---|---|---|
+| `BR-44` | An event that fails to apply to the read side ten times is quarantined and is not retried automatically (D-18) | An event has reached ten failed attempts | The event is kept as quarantined; no further automatic attempt is made |
+| `BR-45` | While a quarantined event exists for a customer, that customer's front-office status is **verification pending**, and the later events of that customer wait (D-18) | Any read of the front-office status for such a customer | Status verification pending, with the neutral message of BR-40; no risk information (BR-41) |
+| `BR-46` | Each quarantined event produces one operational log line and counts in a metric; each release is recorded with who released it and when (D-18, BR-43) | An event is quarantined, or released | One ERROR line with the event type and the count only, never a customer number or a score; one audit record per release |
+
+The role that may release a quarantined event is a product-owner decision still open (see the design, 2026-11-11 addendum).
+
 ## 5. Business events
 
 Facts announced to other parts of the bank. They carry risk information, so they are delivered only
@@ -483,5 +494,6 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
 - [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07); A-27 amended on 2026-11-08 (D-08)
+- [x] The failure decision D-18 (2026-11-11) is reflected in BR-44 to BR-46
 - [x] The identity decisions D-13 to D-16 (2026-11-09) are reflected in BR-01
 - [x] The stage 6 decisions D-08 to D-12 (2026-11-08) are reflected in BR-01, BR-08, BR-10, BR-12, BR-33, BR-37 and both catalogues
