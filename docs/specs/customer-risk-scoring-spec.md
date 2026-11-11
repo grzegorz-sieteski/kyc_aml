@@ -35,6 +35,7 @@ owner's answers of 2026-11-07 recorded below.
 | D-20 | 2026-11-11 | Only the BFF and the onboarding system may open a connection to this service, each with a client certificate (mutual TLS), in addition to the token. TLS is required on every connection to this service. |
 | D-21 | 2026-11-11 | When the service cannot fetch a refreshed set of signing keys, it keeps verifying tokens with the last set it has, for as long as its cache allows. A revoked key therefore stays valid at most until that cache expires. **Bound set 2026-11-11: at most 300 seconds after the last successful fetch** (a maximum: a deployment may set less, never more), stated explicitly in configuration, never left to a library default. |
 | D-22 | 2026-11-11 | Log lines of the BFF for a decision route carry only the time, the correlation identifier and the duration. They carry neither the route template nor the status, because the status reveals which decision refusal occurred (BR-43). |
+| D-23 | 2026-11-11 | A token that names any role other than the caller's one role of this service is refused: the caller is not identified (BR-01). Role names of other applications are not ignored. The rule applies to every token, human and application. |
 
 ## Scope
 
@@ -498,6 +499,7 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
 - [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07); A-27 amended on 2026-11-08 (D-08)
+- [x] The role decision D-23 (2026-11-11) is reflected in BR-01
 - [x] The logging decision D-22 (2026-11-11) is reflected in BR-43
 - [x] The identity decisions D-19 to D-21 (2026-11-11) are reflected in BR-01
 - [x] The failure decision D-18 (2026-11-11) is reflected in BR-44 to BR-46
