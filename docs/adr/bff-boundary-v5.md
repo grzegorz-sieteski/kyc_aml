@@ -1,5 +1,16 @@
 # ADR: Backend-for-frontend boundary, fifth draft (v5)
 
+> **Audit 2026-11-11 (fifth): `[CHANGES REQUIRED]`, one blocker. Do not implement.** Blocker: the role rule
+> (7.1 step 3, decision D14) conflicts with D-19 and D-15. A user token with ONBOARDING_SYSTEM must be refused
+> (D-19), and the rule that ignores other role names settles a question the product owner has not answered.
+> Warnings that would make stage-3 tests wrong: the race test reads the clock after the record (18.1 contradicts
+> that order; 18.1b is vacuous without a forced refresh); cache-side exceptions must not count as IdP failures;
+> the record and the health state must change together as one immutable pair; the placeholder check cannot name
+> the setting (per-field constraints needed) and the new TLS placeholders are unguarded; the hand-built decoder
+> drops Boot's validators unless setJwtValidator is called; the decision log cannot separate failure from success
+> (product-owner consequence of D-22); unlisted affected files; retired keys must stay readable until the maximum
+> session lifetime; the upstream exception path must not write URIs.
+
 > **Audit of v4 (2026-11-11, fourth): `[CHANGES REQUIRED]`. Do not implement.** Blocker B1 is resolved by D-22 (section 4). Warnings W1 and W3 to W14 are answered in section 1. W2 and W8 are named neither in the brief nor in the v4 banner, so v5 changes nothing for them; the auditor must confirm they are closed (section 12, item 6).
 
 - **Mode:** `@architect`, design mode, stage 2, fifth draft. **Status:** Proposed, 2026-11-11. Section 13 lists what the product owner decides.

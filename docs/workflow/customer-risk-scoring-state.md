@@ -437,3 +437,9 @@ The v3 race is fixed in mechanism. Blocker B1: decision-route log lines (route t
 BR-43; needs a product-owner answer or a log change. Warnings are listed in the banner of
 `docs/adr/bff-boundary-v4.md`. Also flagged: the main design defers quarantine (lines 310-311), which
 contradicts D-18 and BR-44 to BR-46. Next: v5 for the blocker and the test and startup warnings, then an audit.
+
+## BFF boundary ADR v5: fifth audit, `[CHANGES REQUIRED]`, one blocker (2026-11-11)
+
+Blocker: the role rule (ignoring non-ActorRole names; ONBOARDING_SYSTEM in a user token). D-19 settles the
+onboarding case; the other-names case is a product-owner question. Warnings listed in the banner of
+`docs/adr/bff-boundary-v5.md`. Next: v6 once the owner answers the role question.
