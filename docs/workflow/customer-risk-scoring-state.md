@@ -443,3 +443,9 @@ contradicts D-18 and BR-44 to BR-46. Next: v5 for the blocker and the test and s
 Blocker: the role rule (ignoring non-ActorRole names; ONBOARDING_SYSTEM in a user token). D-19 settles the
 onboarding case; the other-names case is a product-owner question. Warnings listed in the banner of
 `docs/adr/bff-boundary-v5.md`. Next: v6 once the owner answers the role question.
+
+## BFF boundary ADR v6: sixth audit, `[CHANGES REQUIRED]` (2026-11-11)
+
+One blocker: the BFF answers 413 and 400 before identifying the caller (BR-37, BR-01, D-09); a business-rule
+decision is needed. Many warnings, listed in the banner of `docs/adr/bff-boundary-v6.md`. Bytecode-verified:
+the limiter, cache throw sites, propagation, placeholder regex, decoder composition and the role rule.
