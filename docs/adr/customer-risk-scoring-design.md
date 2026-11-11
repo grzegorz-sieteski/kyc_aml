@@ -754,3 +754,18 @@ Tomcat 400 before any filter. Both depend only on the request, not on the token,
 
 Firewall negative tests (`RiskApiHardeningIT.Firewall`) for `%2F`, `%5C`, `%00`, `%2E%2E%2F`, `..%2F`,
 `//` and `%252F%2E%2E` pass with the current allowances: they guard against widening.
+
+### Decision 2026-11-11: F1 through a backend-for-frontend; LOW items accepted
+
+- **F1 (key-fetch budget shared by all callers).** Direction chosen by the product owner: a
+  backend-for-frontend (BFF) in front of this service. The browser or app talks to the BFF with its
+  session; only the BFF calls this service, and it sends tokens it obtained itself. This removes the public
+  surface where an unauthenticated caller can submit tokens with arbitrary `kid`s. What it does not remove:
+  the BFF's own key fetches (same budget logic, but no attacker input reaches it), and callers that are not
+  BFF-fronted (the onboarding system, machine to machine). For those, the open question stays: either
+  restrict them to the network path (mTLS or private network, a deployment control) or accept the F1 trade-off
+  for them. The architect writes the BFF boundary and its trust model in a separate ADR before any code.
+- **Firewall refusals before identification (LOW): accepted.** They do not depend on the token, so they are
+  no oracle. Denial of service through the firewall is not a threat model for this service.
+- **Tomcat refusal of an oversized header block (LOW): accepted.** Same reasoning; no container
+  configuration is changed for it. The business code stays the place where requirements are met.
