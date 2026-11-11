@@ -414,3 +414,11 @@ warnings. The blockers and the list are summarised at the top of the ADR. Next: 
 (sign-in flow, onboarding's identity and booking centre, what a misprovisioned user sees, acceptance of
 internal key-fetch flooding, TLS on the internal hop), a spec decision for the calling-client rule, then
 a second ADR draft. No code is authorised.
+
+## BFF boundary ADR v2: second audit, `[CHANGES REQUIRED]` (2026-11-11)
+
+Four blockers: the rate-limit refusal is not served with last known keys (so F1 and D-21 are not closed in
+the flood case); mutual TLS does not reject an unregistered certificate from a trusted CA before the key
+fetch; the default outage window is 50 min, not 300 s; the BFF logs refusal codes against BR-43. The
+verdict and the test list are in the audit banner at the top of `docs/adr/bff-boundary-v2.md`. No code
+is authorised. Next: a third draft fixing the four blockers, then a further audit.

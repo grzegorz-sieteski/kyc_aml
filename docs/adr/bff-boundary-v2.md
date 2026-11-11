@@ -1,5 +1,16 @@
 # ADR: Backend-for-frontend boundary, second draft (v2)
 
+> **Audit 2026-11-11 (second): `[CHANGES REQUIRED]`, four blockers. Do not implement.** (1) Outage-tolerant
+> keys do not serve a rate-limit refusal: the limiter sits outside the outage layer, so after the cache
+> expires a known key gets 401 under a flood; D-21 and F1 are not closed. (2) Mutual TLS trusts a CA, so an
+> unregistered certificate from a trusted CA reaches the key fetch; the subject check must select the decoder
+> before any fetch. (3) The default outage window is 50 minutes (cache TTL times ten), not 300 seconds; the
+> bound must be set explicitly and stated. (4) The BFF logs refusal codes, which contradicts BR-43 for
+> decision and risk routes. Warnings: a service 401 must not delete a session; the pre-login state needs a
+> bound cookie; logout is local only; the 413 precedes identification (BR-37); the onboarding map and the
+> server certificate are unspecified. Tests required before any claim of D-21 or F1 closure are listed in
+> the audit's verdict.
+
 > Replaces the trust model of `docs/adr/bff-boundary.md`, audited on 2026-11-11 as `[CHANGES REQUIRED]`. The first draft stays as the audit record. Do not implement from it.
 
 - **Status:** Proposed. Section 2 follows the product owner's answers of 2026-11-11. Section 15 lists what the product owner still decides.
