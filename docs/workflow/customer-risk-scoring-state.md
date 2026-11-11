@@ -394,3 +394,15 @@ booking centre; ID tokens versus access tokens; who may write the booking-centre
 `src/main/` only. Orchestrator's GREEN gate: src/test and docs untouched; 0 Checkstyle violations; Surefire
 346, Failsafe 208, 0 failures; BUILD SUCCESS. Developer's choices are recorded in the ADR. Docker had to be
 restarted by hand after a container restart left a stale containerd pid.
+
+## Open items, pass 2026-11-11
+
+| Item | State |
+|---|---|
+| RelayPressureSpike fails when run by hand | fixed (`ALTER` of V3's columns removed); passes with Docker up |
+| OpenAPI contract for the four endpoints | written (`openapi/risk-profiles.yaml`), YAML valid, references resolved; contract tests not yet written |
+| BFF boundary | architect writes `docs/adr/bff-boundary.md` (in progress) |
+| Dead-letter | decided: spec D-18 and BR-44 to BR-46. Design and implementation not started; the releasing role is open for the product owner |
+| Identity: key-fetch trade-off (F1) | onboarding accepted internal-only (D-17); customer-facing via BFF; no code change |
+| Identity: open questions | ID token vs access token; who may write the booking-centre attribute; onboarding's booking centre (app-only tokens may carry no claim) |
+| Deferred technical | startup role check, max-swallow-size, error-code lookup under pool exhaustion, total-score CHECK: recorded in the ADR, not started |
