@@ -247,3 +247,34 @@ and that `accessTokenAcceptedVersion` is 2 (design, I-10).
 - Approve the BFF rules of section 3 and the failure catalogue of section 4 as the BFF's requirements.
 - Answer open questions 1 to 6 (section 8), in particular who owns the BFF and whether the rate limit stays.
 - Authorise the code change of section 6 only after questions 1 and 2 are answered.
+
+---
+
+## Product owner's answers (2026-11-11), input for the second draft
+
+1. **Sign-in and tokens.** Only the BFF holds tokens. The BFF is a Spring Security application; sessions and
+   tokens are kept in Redis. The browser holds a session cookie only and never sees a token.
+2. **Onboarding's identity and booking centre.** Open: proposal below, awaiting confirmation.
+3. **A user whose claims do not identify them** (role removed, two roles, booking centre missing or out of
+   scope) gets the service's constant 401, passed through unchanged. No remapping to 503.
+4. **TLS between the BFF and the service: required.**
+5. **Key-fetch flooding from the BFF's network segment: not accepted.** The second draft must close it, not
+   record it as a risk.
+
+Consequences the second draft must cover: Redis becomes a store of confidential material (tokens at rest,
+encryption, access, expiry, eviction), which replaces the first draft's "never in a shared store"; the cookie
+session needs a CSRF defence that reads no body; and the first draft's row "service 401 becomes BFF 503" is
+withdrawn.
+
+**Proposal for 2 (orchestrator, not yet decided).** One Entra app registration per booking centre for the
+onboarding system. Its app-only token carries the application role `ONBOARDING_SYSTEM` in `roles`; the booking
+centre does not come from the token but from a service-side map, calling client id to booking centre
+(`app.identity.system-callers.<client-id>=<booking-centre-id>`), required and validated at startup. A client
+not in the map is not identified. `ONBOARDING_SYSTEM` is accepted only from an app-only token of a mapped
+client, never from a user's token; the four human roles are accepted only from a user's token issued to the
+BFF. Whether Entra's app-only tokens carry what this needs must be checked in the tenant.
+
+**Proposal for 5 (orchestrator, not yet decided).** Mutual TLS on the service's listener, so that only
+holders of a BFF or onboarding client certificate can open a connection at all: a flood then needs a stolen
+certificate, not just a place on the subnet. In depth, the service keeps its last known key set when a
+refresh is refused by the rate limiter, so cached signing keys keep verifying during a flood.
