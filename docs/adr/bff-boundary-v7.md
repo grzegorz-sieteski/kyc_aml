@@ -1,5 +1,16 @@
 # ADR: Backend-for-frontend boundary, seventh draft (v7)
 
+> **Audit 2026-11-26 (seventh): `[CHANGES REQUIRED]`, one blocker. Do not implement.** B1: the JDK 25 HttpClient
+> sends the body after a hard-coded 5 000 ms without waiting for `100 Continue` (`Exchange.expectContinue`,
+> `ldc2_w 5000`, `completeOnTimeout`), and identification can take longer (cache refresh timeout 5 000 ms plus
+> the fetch), so a slow identification leaks body bytes and gives size-dependent answers before identification
+> (D-24). Expect/onRead cannot be the mechanism. Warnings: answers before identification not all listed (firewall
+> 400, oversized header, BFF 404, CSRF/origin 403 for a session holder) and the "accepted as LOW" citation is
+> wrong (W1); DEBUG on org.springframework.web reads form bodies before identification, pin it to INFO (W2);
+> option B of D-20 can be done without `throw` (JDK PKIX over a truststore of the registered leaves) and its class
+> name breaks the Manager ban (W3); five ITs use plain http and need TLS clients (W4); the claim-reading rewrite
+> of ConfiguredIdentityValidator and CallerClaims is not listed (W5); the CAS-loser rule contradicts v6 (W6).
+
 > **Status: Proposed, 2026-11-26. Not audited. Do not implement** until the tests in section 14 are red in stage 3
 > and the items in section 15 are decided. v7 is a delta on v6 that answers the sixth audit (blocker F1, warnings
 > F2 to F16) under the new decision D-24.

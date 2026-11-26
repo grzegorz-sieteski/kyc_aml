@@ -449,3 +449,9 @@ onboarding case; the other-names case is a product-owner question. Warnings list
 One blocker: the BFF answers 413 and 400 before identifying the caller (BR-37, BR-01, D-09); a business-rule
 decision is needed. Many warnings, listed in the banner of `docs/adr/bff-boundary-v6.md`. Bytecode-verified:
 the limiter, cache throw sites, propagation, placeholder regex, decoder composition and the role rule.
+
+## BFF boundary ADR v7: seventh audit, `[CHANGES REQUIRED]` (2026-11-26)
+
+Blocker: Expect: 100-continue cannot enforce D-24, because the JDK client sends the body after 5 s regardless,
+and identification can take longer. A product-owner choice is needed between buffering a bounded body at the
+BFF without judging it, and a two-step identify-then-send. Warnings in the banner of `docs/adr/bff-boundary-v7.md`.
