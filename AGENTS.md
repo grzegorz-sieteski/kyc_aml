@@ -133,7 +133,13 @@ Be honest about this, because the distinction matters:
 - `src/test/resources/archunit.properties` sets `archRule.failOnEmptyShould=true`, and there is no
   per-rule escape hatch left anywhere. Keep it that way: with it false, a typo in a package name
   turns a rule into a green test that checks nothing, and you will trust it.
-- `openapi/` is empty: the four endpoints of `risk` have no published contract yet.
+- `openapi/customer-risk-scoring.yaml` is the API contract of the four `risk` endpoints, a **draft for
+  the product owner's approval** (2026-11-27). No test checks it against the code yet: a change to a
+  route, a field, a status or a problem `type` changes the contract in the same commit.
+- **`mvnw` and `scripts/check-write-lock.sh` must stay executable** (git mode `100755`). Until
+  2026-11-27 both were `100644`, so every CI run failed at `./mvnw: Permission denied` before Maven
+  started: no build had ever passed in CI, only locally. Maven compiles with whatever JDK `JAVA_HOME`
+  names; if that is not 25, the compile fails with `release version 25 not supported`.
 - **Spring Boot 4 does not bind `server.error.*`** (removed in 4.0.0; use `spring.web.error.*`). A
   property under the old prefix is silently ignored, which is how `include-stacktrace: never` sat in
   `application.yml` doing nothing until 2026-11-08. Check a property against the Boot metadata before

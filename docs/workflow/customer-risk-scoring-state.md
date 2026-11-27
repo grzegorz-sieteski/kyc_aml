@@ -1,7 +1,7 @@
 # customer-risk-scoring
 
-Stage: 6 · Status: APPROVED (all reviews [APPROVED]; open items are product-owner decisions and recorded deferrals)
-Updated: 2026-11-08
+Stage: 6 · Status: APPROVED; two low findings from the API contract (OAS-01, OAS-02) wait for stage 3
+Updated: 2026-11-27
 
 ## Source
 
@@ -54,13 +54,20 @@ Two inconsistencies inside the harness itself, found while preparing this stage:
 
 ## Open defects
 
-None. Known gaps: no identity source (every call is 401 until one is chosen), no dead-letter handling for an outbox row that keeps failing (attempts make it visible), no real booking-centre configuration, no React yet.
+OAS-01 and OAS-02, both Low, found while writing the API contract (section of 2026-11-27 below). Known gaps: no identity source (every call is 401 until one is chosen), no dead-letter handling for an outbox row that keeps failing (attempts make it visible), no real booking-centre configuration, no React yet.
 
 ## Next
 
-Back to stage 3 with the consolidated list below. `@test-designer` writes a failing test for every
-R-xx not yet covered (QA-01 to QA-04 are), and corrects the three tests that pin behaviour the spec
-forbids. Items marked **PO** wait for a product owner decision before their test is written.
+As of 2026-11-27:
+
+1. **Product owner:** approve or correct the contract draft `openapi/customer-risk-scoring.yaml`, and
+   decide how a refusal names its field (OAS-01).
+2. **`@test-designer`**, in a fresh chat: a failing test for OAS-02, one for OAS-01 once it is decided,
+   and a contract test that checks the responses of `RiskApiFlowIT` against `openapi/`.
+3. **Open the pull request of this branch**, so CI runs once with the executable wrapper. No CI run has
+   passed yet.
+
+Still open for the product owner: the identity source and dead-letter handling of the outbox.
 
 ## Status (2026-11-07)
 
@@ -336,7 +343,43 @@ deployment controls in AGENTS.md and a deferred startup self-check in the ADR; a
 
 Every review round is approved: stage 5 QA findings, stage 6 code and security reviews and their three
 re-reviews, and the R-30 to R-32 security checks. Open, for the product owner: the identity source (every
-call is 401 until one is chosen), dead-letter handling of the outbox, and the `openapi/` contract.
+call is 401 until one is chosen), dead-letter handling of the outbox, and approving the `openapi/`
+contract draft (written 2026-11-27, below).
 Deferred and recorded in the ADR: the fail-closed D-11 checks at migration and at startup (both need the
 Spring ITs on two roles), `max-swallow-size` and `100 Continue` timing, error-code lookup under an
 exhausted pool, the total-score `CHECK`, and `RelayPressureSpike` failing when run by hand.
+
+## 2026-11-27: build wrapper fixed, full gate re-run, API contract drafted
+
+**CI had never run a build.** `mvnw` and `scripts/check-write-lock.sh` were committed as mode `100644`.
+All nine CI runs, from the initial commit to the merge of PR #1, failed at `./mvnw: Permission denied`
+(exit 126) before Maven started (job log of run 42654472570 checked). Every build result on this board
+was therefore a local run. Fixed in `74f82d8` (mode `100755`). CI runs only on pull requests and pushes to
+`main`, so the fix is proven in CI when this branch's pull request runs.
+
+**Full gate, orchestrator's run at `74f82d8`** (JDK 25.0.5, Docker 29.9, PostgreSQL 17): `./mvnw -B verify`
+→ 0 Checkstyle violations; Surefire 343, 0 failures; Failsafe 159, 0 failures; BUILD SUCCESS. The
+container's `JAVA_HOME` named JDK 21 and had to be pointed at 25.
+
+**API contract.** `openapi/customer-risk-scoring.yaml` (OpenAPI 3.1), a draft for the product owner: the
+four operations with their roles and order of judgement, every request field with its rule, every
+response body, and every refusal as a problem `type` per status. Written from the code, the spec and the
+ADR. Its examples were recorded by a temporary probe on a real Tomcat and PostgreSQL with an injected
+caller (deleted, not committed). Checked by a script outside the repository:
+
+- every `$ref` resolves, and every example matches its schema;
+- the 28 recorded responses match the contract in status, content type, `Cache-Control` and body;
+- the problem types of each operation are exactly the codes its resource produces;
+- the request schemas refuse what the spec refuses (wrong JSON types, 11 or 0 citizenships, any missing
+  field, a lone CR, a TAB, 65 code points, a control character) and accept what it allows (CR LF, 20
+  emoji, `;` and spaces in a customer number).
+
+Result: 262 checks, 0 failures. Four deliberate breaks of the contract were each caught. The Redocly
+linter was not run (refused in this environment).
+
+| ID | Severity | Finding | Evidence | Direction |
+|---|---|---|---|---|
+| OAS-01 | Low | BR-08, BR-09 and BR-12 say the refusal names which country or critical fact; the 400 names neither. The domain errors carry the field (`CountryInvalid(CountryField)`, `GeographicClassInvalid(CountryField)`, `CriticalFactMissing(CriticalFactField)`); `EvaluateCustomerRiskResource` drops it | `"loginCountry":"XX"` → `country-invalid`, detail "A country code is not a valid ISO 3166-1 code." | **PO / architect**: how the problem names the field (for example an extension member `field`); then stage 3 |
+| OAS-02 | Low | The view's `evaluatedAt` changes when a decision is projected, though no evaluation happened. The evaluation event carries the clock's nanoseconds; `command.risk_profile.evaluated_at` is a microsecond `TIMESTAMPTZ`, and a decision's event carries the value reloaded from it | `…53.552410932Z` before a freeze, `…53.552411Z` after it (rounded up) | stage 3: a failing test that a decision leaves `evaluatedAt` unchanged; the likely fix is one precision at the source (the clock port) |
+
+The contract describes what runs, OAS-01 included, and changes with the fix.
