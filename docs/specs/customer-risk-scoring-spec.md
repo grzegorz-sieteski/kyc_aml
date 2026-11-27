@@ -39,6 +39,15 @@ owner's answers of 2026-11-07 recorded below.
 | D-24 | 2026-11-26 | Security comes before processing, on every path including the BFF. A caller who is not identified (BR-01) gets the constant not-identified answer and nothing else: no component, the BFF included, judges the size, form or content of the request before the caller is identified. The BFF therefore does not answer about the body itself; the identification of the service decides first. |
 | D-25 | 2026-11-27 | On a route that carries a body, the BFF first asks the service to identify the caller, with no body. Only when the service confirms the caller does the BFF read and forward the body. No byte of the body is read before the service has identified the caller (D-24). |
 | D-26 | 2026-11-27 | Accepted exceptions to D-24, because none depends on the token or reveals data: the HTTP firewall's 400 for a malformed path (service and BFF); the container's 400 for an oversized header block or a malformed Content-Length; the BFF's 404 for an unknown route; and the BFF's 403 for a failed origin or CSRF check of a session holder. For the origin and CSRF checks, a BFF session counts as the caller's identification. |
+| D-27 | 2026-11-27 | D-22 amended: a decision-route log line also carries a coarse outcome, one of `ok`, `refused` or `unavailable`. It never carries the refusal code, the status or the route template, so it does not reveal which refusal occurred. |
+| D-28 | 2026-11-27 | D-20 made exact: the TLS handshake refuses any client certificate that is not one of the registered ones, even if a trusted authority issued it. Renewing a client certificate is a configuration change. |
+| D-29 | 2026-11-27 | A defect in the service's own token checks may answer with a server error rather than the not-identified answer. It is a defect to fix, not a refusal. |
+| D-30 | 2026-11-27 | A new role, **Operations**, may release a quarantined event (D-18, BR-46) and do nothing else. It has no access to risk information, decisions or views. |
+| D-31 | 2026-11-27 | One live session per user: a new sign-in ends the user's previous session. |
+| D-32 | 2026-11-27 | A session ends after 15 minutes without use, and in any case 8 hours after sign-in. |
+| D-33 | 2026-11-27 | Sign-out ends the session in the BFF only; it does not revoke the user's sign-in at the identity provider. |
+| D-34 | 2026-11-27 | This increment builds the service side only: the identification step for the BFF (D-25), the mutual-TLS rules (D-20, D-28) and the corrections to answers given before identification. The BFF itself, with its session store and identity-provider client, comes in a later increment; its owner is still to be named. |
+| D-35 | 2026-11-27 | Log lines of the BFF for the risk read routes carry the same fields as for a decision route (D-22, D-27). |
 
 ## Scope
 
@@ -502,6 +511,7 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
 - [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07); A-27 amended on 2026-11-08 (D-08)
+- [x] The decisions D-27 to D-35 (2026-11-27) are recorded; D-30 adds the Operations role for BR-46
 - [x] The exceptions decision D-26 (2026-11-27) is reflected in BR-37
 - [x] The two-step decision D-25 (2026-11-27) is reflected in BR-37
 - [x] The ordering decision D-24 (2026-11-26) is reflected in BR-37
