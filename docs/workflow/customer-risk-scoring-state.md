@@ -455,3 +455,9 @@ the limiter, cache throw sites, propagation, placeholder regex, decoder composit
 Blocker: Expect: 100-continue cannot enforce D-24, because the JDK client sends the body after 5 s regardless,
 and identification can take longer. A product-owner choice is needed between buffering a bounded body at the
 BFF without judging it, and a two-step identify-then-send. Warnings in the banner of `docs/adr/bff-boundary-v7.md`.
+
+## BFF boundary ADR v8: eighth audit, `[CHANGES REQUIRED]` (2026-11-27)
+
+Service side of D-25 verified. Blocker: OPTIONS and some Tomcat protocol refusals answer before identification
+and are outside D-26. Product-owner input needed on the Tomcat refusals and on how the Operations role (D-30)
+is identified. Next: spec consistency fix for D-30, then v9 for this increment only (D-34).

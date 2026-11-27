@@ -1,5 +1,16 @@
 # ADR: Backend-for-frontend boundary, eighth draft (v8)
 
+> **Audit 2026-11-27 (eighth): `[CHANGES REQUIRED]`, one blocker. Do not implement.** B1 of v7 is closed on the
+> service side (a body-less GET sends no Content-Length; verified in the JDK client). Blocker F1: the set of
+> answers before identification is not closed. (a) OPTIONS answers 200 with `Allow` before identification today,
+> and a method-less `/**` cannot catch it; a CORS pre-flight is answered too. Fix in design: OPTIONS identifies
+> first. (b) Tomcat refuses some requests before any application code (TRACE 405, `OPTIONS *`, Host, URI,
+> version 505, Expect 417, Transfer-Encoding, encoding 501), none token-dependent, not in D-26: owner decision.
+> Warnings: v8 predates D-27 to D-35 (split this increment from the BFF increment, D-34); the Operations role
+> (D-30) leaves the spec inconsistent (five roles in D-15, four in D-19, no release command, no channel); the
+> BFF's repeat after a refresh must re-identify; `IdentityIT.shouldNotServeSpringSecurityEndpoints` changes to
+> 401; today a wrong method answers 405, and a bad token vs. bad claims differ on unknown routes (I-04).
+
 > **Status: Proposed, 2026-11-27. Not audited. Do not implement** until the tests in section 14 are red in stage 3
 > and the items in section 15 are decided. v8 is a delta on v7 that answers the seventh audit (blocker B1, warnings
 > W1 to W6, notes N1 to N7) under the new spec decisions D-25 (two-step body route) and D-26 (accepted exceptions).
