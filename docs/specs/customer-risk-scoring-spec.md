@@ -27,11 +27,11 @@ owner's answers of 2026-11-07 recorded below.
 | D-12 | 2026-11-08 | Input is read strictly. Input that is not a single well-formed object, or that names a field twice, is refused as **request not readable**. A field whose value is of the wrong kind (a number or text where yes or no is required, text or a fraction where a version is required) is refused as that field's own refusal, never coerced. A version viewed that is missing, not a whole number or below 1 is refused as **version viewed not valid** (R-06, R-07). |
 | D-13 | 2026-11-09 | A caller is identified only by a signed access token issued by the bank's identity provider, Microsoft Entra ID, for this service, presented with the request. The token must be genuine, current, issued by the configured issuer and meant for this service. Anything else, including a missing token, is **caller not identified**. |
 | D-14 | 2026-11-09 | The token names the caller's identity, role and booking centre in claims whose names are configured, not fixed in the service, so the identity provider's setup can change without a release. |
-| D-15 | 2026-11-09 | A token must carry exactly one of the five roles of A-02. No role of this service, more than one, or a role name that does not match exactly, is **caller not identified**. |
+| D-15 | 2026-11-09 | A token must carry exactly one of the roles of this service: the five of A-02 and Operations (D-30). No role of this service, more than one, or a role name that does not match exactly, is **caller not identified**. |
 | D-16 | 2026-11-09 | The booking centre in the token must be a well-formed booking centre identifier, and one of the booking centres in scope (D-06); otherwise the caller is not identified (BR-01). |
 | D-17 | 2026-11-11 | The onboarding system reaches this service only from the internal network; nothing from the internet can reach it. Its risk classification is therefore lower than that of the customer-facing channels, and the key-fetch risk of an unknown key identifier from outside (F1) is accepted for it. Customer-facing callers go through the backend-for-frontend (ADR, decision 2026-11-11). |
 | D-18 | 2026-11-11 | A risk event that the read side cannot apply after ten attempts is set aside (quarantined) and is not retried automatically. While such an event exists for a customer, the customer's front-office status is **verification pending** (fail-closed). Later events for that customer wait behind it, so that no change is applied out of order. Quarantine is visible to operations (log and metric), and it is released only by a person, after the cause has been fixed, with a record of who released it. |
-| D-19 | 2026-11-11 | A caller is identified also by the application that presents its token. Human roles (the four analyst and officer roles) are accepted only from a user's token issued for the BFF, the only route for people. The onboarding role is accepted only from an application-only token of an onboarding application that is registered in the service's configuration. Its booking centre comes from that registration, never from a token or a request. An application that is not registered is not identified (BR-01). |
+| D-19 | 2026-11-11 | A caller is identified also by the application that presents its token. Human roles (the four analyst and officer roles, and Operations, D-30 and D-37) are accepted only from a user's token issued for the BFF, the only route for people. The onboarding role is accepted only from an application-only token of an onboarding application that is registered in the service's configuration. Its booking centre comes from that registration, never from a token or a request. An application that is not registered is not identified (BR-01). |
 | D-20 | 2026-11-11 | Only the BFF and the onboarding system may open a connection to this service, each with a client certificate (mutual TLS), in addition to the token. TLS is required on every connection to this service. |
 | D-21 | 2026-11-11 | When the service cannot fetch a refreshed set of signing keys, it keeps verifying tokens with the last set it has, for as long as its cache allows. A revoked key therefore stays valid at most until that cache expires. **Bound set 2026-11-11: at most 300 seconds after the last successful fetch** (a maximum: a deployment may set less, never more), stated explicitly in configuration, never left to a library default. |
 | D-22 | 2026-11-11 | Log lines of the BFF for a decision route carry only the time, the correlation identifier and the duration. They carry neither the route template nor the status, because the status reveals which decision refusal occurred (BR-43). |
@@ -48,6 +48,8 @@ owner's answers of 2026-11-07 recorded below.
 | D-33 | 2026-11-27 | Sign-out ends the session in the BFF only; it does not revoke the user's sign-in at the identity provider. |
 | D-34 | 2026-11-27 | This increment builds the service side only: the identification step for the BFF (D-25), the mutual-TLS rules (D-20, D-28) and the corrections to answers given before identification. The BFF itself, with its session store and identity-provider client, comes in a later increment; its owner is still to be named. |
 | D-35 | 2026-11-27 | Log lines of the BFF for the risk read routes carry the same fields as for a decision route (D-22, D-27). |
+| D-36 | 2026-11-27 | D-26 extended: the container's refusals of a request that is not acceptable HTTP/1.1, given before any application code runs, are also accepted exceptions to D-24 (for example a missing or conflicting Host header, an invalid request line or URI, an unsupported protocol version, an unsupported Expect value or transfer coding, TRACE, and `OPTIONS *`). None depends on the token or reveals data. Every other answer before identification, `OPTIONS` on a route included, is a defect. |
+| D-37 | 2026-11-27 | All traffic of people goes through the BFF. The Operations role (D-30) is a person who signs in through the BFF like the other human roles; there is no other way in for Operations. Until the BFF exists (D-34), no quarantined event can be released: it stays quarantined and the customer's front-office status stays verification pending (BR-45). The onboarding system is not a person and keeps its direct internal route (D-17, D-19). |
 
 ## Scope
 
@@ -188,7 +190,7 @@ with a marker is not confirmed until that assumption is.
 | `BR-34` | A justification must be supplied: at least 20 characters, at most 2 000 characters. It may contain line breaks; it contains no other control character (A-25) | Missing; shorter than 20 characters; longer than 2 000 characters; contains a control character other than a line break | Refused: **justification missing**, **justification too short**, **justification too long**, or **justification contains a control character** |
 | `BR-35` | A decision that changes nothing, or that would lower a decided track other than by clearing, is refused. The test is the decided track, not the effective one: freezing a customer who is Red by evaluation alone is allowed, because it makes the freeze survive later evaluations (BR-31) (A-26) | Freeze when the decided track is already Red; escalate when the decided track is already Orange or Red; clear when no decided track exists | Refused: **already frozen**, **already escalated**, or **nothing to clear** |
 | `BR-36` | A decided track cannot be cleared while a critical fact is in force | Clear as false positive, and the latest evaluation has a critical fact in force | Refused: **critical fact in force**. The customer stays on Red |
-| `BR-37` | A decision is judged in a fixed order, and the first failure found is the one refusal the caller receives (A-27) | Any decision | Caller identified (BR-01); request not too large and readable (D-09, D-12); role permits this kind of decision, an unrecognised kind being judged as freezing assets (BR-02, D-08); the kind of decision is recognised (BR-32); customer found in the caller's booking centre (BR-04); justification valid (BR-34); version viewed valid and current (BR-33); critical fact (BR-36); the decision changes something (BR-35); no concurrent change (BR-30) |
+| `BR-37` | A decision is judged in a fixed order, and the first failure found is the one refusal the caller receives (A-27) | Any decision | Caller identified (BR-01); before that, an unidentified caller gets only the not-identified answer (D-24), apart from the accepted exceptions of D-26 and D-36, and the BFF reads no byte of the body before the service has identified the caller (D-25); request not too large and readable (D-09, D-12); role permits this kind of decision, an unrecognised kind being judged as freezing assets (BR-02, D-08); the kind of decision is recognised (BR-32); customer found in the caller's booking centre (BR-04); justification valid (BR-34); version viewed valid and current (BR-33); critical fact (BR-36); the decision changes something (BR-35); no concurrent change (BR-30) |
 | `BR-38` | A decision records who decided, when, which decision, the justification, and the version it was taken on. It changes neither the score nor the explanation | A decision is recorded | The compliance view shows the latest decision with these details |
 
 ### Views and tipping-off
@@ -338,6 +340,35 @@ decision with who took it, when, the justification and the version it was taken 
 | F7a | An L2 analyst freezes assets on a profile that is Red by evaluation alone, with no decided track | Recorded: decided Red, effective Red, assets frozen; a later Green evaluation leaves it Red (BR-31) |
 | F8 | An L1 analyst freezes assets | Refused: role may not perform this operation (A-02) |
 
+### Command 3 — Release Quarantined Event (D-18, D-30, D-37)
+
+| Aspect | Value |
+|---|---|
+| **Who may do it** | Operations only (D-30), through the BFF (D-37) |
+| **Organisational context** | The customer's risk profile must belong to the caller's booking centre (BR-04) |
+
+Inputs and their hard constraints:
+
+| Input | Required | Constraint |
+|---|---|---|
+| Customer number | Yes | Names one risk profile of the caller's booking centre (BR-06); otherwise **customer not found** |
+| Justification | Yes | Why the cause is fixed; same rules as BR-34 (A-32) |
+
+**Every reason this command can be refused** (exhaustive), in this order:
+
+| # | Refusal reason | Rule |
+|---|---|---|
+| 1 | Caller not identified | BR-01 |
+| 2 | Request too large | D-09 |
+| 3 | Request not readable | D-12 |
+| 4 | Role may not perform this operation | BR-02, D-30 |
+| 5 | Customer not found | BR-04 |
+| 6 | Justification missing, too short, too long or with a control character | BR-34, A-32 |
+| 7 | Nothing quarantined for this customer | BR-44 |
+| 8 | Changed concurrently | BR-30 |
+
+**Business fact that follows success:** the oldest quarantined event of that customer is set back to be applied, in order (BR-45), and one release record is kept: who released it, when, for which customer, and the justification (BR-46). The release shows no risk information to the Operations caller, and its answer carries none (D-30, BR-41).
+
 ## 4. Query catalogue
 
 ### Query 1 — Compliance Risk View
@@ -381,7 +412,7 @@ Refusals: caller not identified (BR-01); customer not found (BR-04). Neither ref
 | `BR-45` | While a quarantined event exists for a customer, that customer's front-office status is **verification pending**, and the later events of that customer wait (D-18) | Any read of the front-office status for such a customer | Status verification pending, with the neutral message of BR-40; no risk information (BR-41) |
 | `BR-46` | Each quarantined event produces one operational log line and counts in a metric; each release is recorded with who released it and when (D-18, BR-43) | An event is quarantined, or released | One ERROR line with the event type and the count only, never a customer number or a score; one audit record per release |
 
-The role that may release a quarantined event is a product-owner decision still open (see the design, 2026-11-11 addendum).
+A quarantined event is released by a person with the Operations role (D-30), signing in through the BFF (D-37), with command 3.
 
 ## 5. Business events
 
@@ -504,6 +535,9 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 **A-31.**
 > `CONFIRMED 2026-11-07 (D-07): the decision event does not carry the justification; the justification is recorded and shown in the compliance view only. Source: analyst default, to keep free text out of messages; ARGON's decision event carries it.`
 
+**A-32.**
+> `ASSUMPTION (2026-11-27, analyst, awaiting the product owner): a release names the customer, not an event, releases that customer's oldest quarantined event, and carries a justification under the rules of BR-34. Source: analyst default, so that Operations never handles an internal event identity (D-05) and every release is explained in the record BR-46 asks for.`
+
 ## Hand-over checklist
 
 - [x] Every rule has an ID and is testable as written
@@ -511,6 +545,8 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
 - [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07); A-27 amended on 2026-11-08 (D-08)
+- [ ] **A-32 is unresolved** (command 3 inputs): stage 2 for command 3 waits for the product owner
+- [x] D-36 and D-37 (2026-11-27) recorded; D-15, D-19, BR-37 and BR-46 brought in line; command 3 added
 - [x] The decisions D-27 to D-35 (2026-11-27) are recorded; D-30 adds the Operations role for BR-46
 - [x] The exceptions decision D-26 (2026-11-27) is reflected in BR-37
 - [x] The two-step decision D-25 (2026-11-27) is reflected in BR-37
