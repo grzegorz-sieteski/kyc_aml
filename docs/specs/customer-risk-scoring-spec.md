@@ -50,6 +50,7 @@ owner's answers of 2026-11-07 recorded below.
 | D-35 | 2026-11-27 | Log lines of the BFF for the risk read routes carry the same fields as for a decision route (D-22, D-27). |
 | D-36 | 2026-11-27 | D-26 extended: the container's refusals of a request that is not acceptable HTTP/1.1, given before any application code runs, are also accepted exceptions to D-24 (for example a missing or conflicting Host header, an invalid request line or URI, an unsupported protocol version, an unsupported Expect value or transfer coding, TRACE, and `OPTIONS *`). None depends on the token or reveals data. Every other answer before identification, `OPTIONS` on a route included, is a defect. |
 | D-37 | 2026-11-27 | All traffic of people goes through the BFF. The Operations role (D-30) is a person who signs in through the BFF like the other human roles; there is no other way in for Operations. Until the BFF exists (D-34), no quarantined event can be released: it stays quarantined and the customer's front-office status stays verification pending (BR-45). The onboarding system is not a person and keeps its direct internal route (D-17, D-19). |
+| D-38 | 2026-11-27 | A-32 confirmed: a release names the customer, not an event; it releases that customer's oldest quarantined event, so order is kept; it carries a justification under the rules of BR-34, which is kept in the release record of BR-46. |
 
 ## Scope
 
@@ -536,7 +537,7 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 > `CONFIRMED 2026-11-07 (D-07): the decision event does not carry the justification; the justification is recorded and shown in the compliance view only. Source: analyst default, to keep free text out of messages; ARGON's decision event carries it.`
 
 **A-32.**
-> `ASSUMPTION (2026-11-27, analyst, awaiting the product owner): a release names the customer, not an event, releases that customer's oldest quarantined event, and carries a justification under the rules of BR-34. Source: analyst default, so that Operations never handles an internal event identity (D-05) and every release is explained in the record BR-46 asks for.`
+> `CONFIRMED 2026-11-27 (D-38): a release names the customer, not an event, releases that customer's oldest quarantined event, and carries a justification under the rules of BR-34. Source: analyst default, so that Operations never handles an internal event identity (D-05) and every release is explained in the record BR-46 asks for.`
 
 ## Hand-over checklist
 
@@ -545,7 +546,7 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
 - [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07); A-27 amended on 2026-11-08 (D-08)
-- [ ] **A-32 is unresolved** (command 3 inputs): stage 2 for command 3 waits for the product owner
+- [x] A-32 confirmed by the product owner (D-38): command 3 is ready for stage 2
 - [x] D-36 and D-37 (2026-11-27) recorded; D-15, D-19, BR-37 and BR-46 brought in line; command 3 added
 - [x] The decisions D-27 to D-35 (2026-11-27) are recorded; D-30 adds the Operations role for BR-46
 - [x] The exceptions decision D-26 (2026-11-27) is reflected in BR-37
