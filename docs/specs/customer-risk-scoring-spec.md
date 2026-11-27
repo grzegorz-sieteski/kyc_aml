@@ -403,7 +403,7 @@ found (BR-04).
 The view shows the customer number, the operational status and the neutral message of BR-40, and
 nothing else.
 
-Refusals: caller not identified (BR-01); customer not found (BR-04). Neither refusal refers to risk
+Refusals: caller not identified (BR-01); role may not perform this operation, for Operations only (D-30: Operations has no access to views); customer not found (BR-04). No refusal refers to risk
 (BR-41).
 
 ### Failure handling (D-18)
