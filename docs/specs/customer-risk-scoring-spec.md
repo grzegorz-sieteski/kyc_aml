@@ -38,6 +38,7 @@ owner's answers of 2026-11-07 recorded below.
 | D-23 | 2026-11-11 | A token that names any role other than the caller's one role of this service is refused: the caller is not identified (BR-01). Role names of other applications are not ignored. The rule applies to every token, human and application. |
 | D-24 | 2026-11-26 | Security comes before processing, on every path including the BFF. A caller who is not identified (BR-01) gets the constant not-identified answer and nothing else: no component, the BFF included, judges the size, form or content of the request before the caller is identified. The BFF therefore does not answer about the body itself; the identification of the service decides first. |
 | D-25 | 2026-11-27 | On a route that carries a body, the BFF first asks the service to identify the caller, with no body. Only when the service confirms the caller does the BFF read and forward the body. No byte of the body is read before the service has identified the caller (D-24). |
+| D-26 | 2026-11-27 | Accepted exceptions to D-24, because none depends on the token or reveals data: the HTTP firewall's 400 for a malformed path (service and BFF); the container's 400 for an oversized header block or a malformed Content-Length; the BFF's 404 for an unknown route; and the BFF's 403 for a failed origin or CSRF check of a session holder. For the origin and CSRF checks, a BFF session counts as the caller's identification. |
 
 ## Scope
 
@@ -501,6 +502,7 @@ Each was an open assumption until 2026-11-07, when the product owner confirmed i
 - [x] Every number traces to the product owner, or carries an `ASSUMPTION` marker (A-01, A-06, A-13, A-25)
 - [x] No class name, table name, SQL or framework term in the document
 - [x] Every assumption resolved: A-01 to A-31 confirmed on 2026-11-07 (D-07); A-27 amended on 2026-11-08 (D-08)
+- [x] The exceptions decision D-26 (2026-11-27) is reflected in BR-37
 - [x] The two-step decision D-25 (2026-11-27) is reflected in BR-37
 - [x] The ordering decision D-24 (2026-11-26) is reflected in BR-37
 - [x] The role decision D-23 (2026-11-11) is reflected in BR-01
