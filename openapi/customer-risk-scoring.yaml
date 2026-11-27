@@ -1,0 +1,1238 @@
+openapi: 3.1.0
+
+info:
+  title: Customer risk scoring
+  version: 0.1.0
+  summary: Evaluate a bank customer's money-laundering and terrorist-financing risk, and record compliance decisions on it.
+  description: |
+    **Draft for the product owner's approval.** This contract describes the `risk` module as implemented
+    and approved (state board `docs/workflow/customer-risk-scoring-state.md`). Where it and the code
+    disagree, the code is what runs; where it and the specification disagree, the specification
+    (`docs/specs/customer-risk-scoring-spec.md`) decides, and the difference is a defect. The examples
+    are responses recorded from the running service on a real PostgreSQL, except the few cases that
+    were not recorded (the concurrent-change conflicts, the `ACTIVE` status, and some refusals of the
+    decision and view operations), which are built from the code.
+
+    ## Identity
+
+    Every operation needs an identified caller: a booking centre, an identity and a role, together
+    (BR-01). **No identity source has been chosen yet, so today every call is answered 401.** How a
+    caller proves who they are is therefore not part of this contract, and no security scheme is
+    declared. A caller whose booking centre is not one of the centres in scope (US, GB, DE; D-06) is
+    not identified either, on every route. The booking centre always comes from the caller, never from
+    the request.
+
+    ## The order of judgement
+
+    Each operation judges a request in a fixed order, and the first failure found is the one refusal
+    returned. In particular the role is judged before any input is read (BR-03), so a caller who may
+    not perform an operation learns nothing about whether its input was valid or whether the customer
+    exists. A customer of another booking centre and a customer who does not exist get the same 404
+    (BR-04). Each operation lists its own order.
+
+    ## Refusals
+
+    Every refusal is an RFC 9457 problem (`application/problem+json`). Its `type` is a URN
+    `urn:problem-type:risk:<code>` and is the only field a client should branch on. `detail` is a
+    constant sentence per `type`. `instance` is a constant per operation and never repeats the request
+    path, so it never echoes the customer number. A refused operation records nothing and announces
+    nothing (BR-42).
+
+    Outside the four operations (an unknown path, a method a route does not take), the service answers
+    with the same problem shape, `type` `urn:problem-type:risk:request-not-handled`, the container's
+    status (404, 405 with an `Allow` header, ...) and `instance` `/api/risk-profiles`. Paths that Tomcat
+    itself refuses before the service sees them (an encoded NUL, `/` or `\`, invalid UTF-8) get
+    Tomcat's own 400 in `text/html`, outside this contract.
+
+    ## Reading requests
+
+    Request bodies are read only after the caller is identified (and, for an evaluation, admitted),
+    and never beyond their limit: 64 KiB for an evaluation, 16 KiB for a decision (D-09). They are read
+    strictly (D-12): anything that is not exactly one JSON object in UTF-8, or that names a key twice,
+    is `request-not-readable`. A field is taken only when its JSON type is the expected one; nothing is
+    coerced (`0` is not `false`, `"1"` is not `1`, `1.0` is not a whole number), and a field of the
+    wrong type is refused as that field's own refusal. Unknown fields are ignored. The request
+    `Content-Type` is not checked.
+
+    ## Responses
+
+    Every response carries `Cache-Control: no-store`. Scores, weights, the multiplier and the
+    thresholds are decimals with exactly two places (for example `51.00`); read them as decimals, not
+    as binary floating point. Moments are UTC, ISO 8601.
+
+    ## Data classification
+
+    Everything in the compliance view is confidential: revealing it is tipping-off (FATF Recommendation
+    21). The front-office status reveals nothing about risk (BR-40, BR-41).
+
+tags:
+  - name: Evaluation
+    description: The onboarding system's door into the scoring core.
+  - name: Compliance decisions
+    description: Freeze, escalate or clear, each with the role it needs.
+  - name: Views
+    description: The compliance view, and the neutral front-office status.
+
+paths:
+  /api/risk-profiles/{customerNumber}/evaluations:
+    parameters:
+      - $ref: '#/components/parameters/CustomerNumber'
+    post:
+      tags: [Evaluation]
+      operationId: evaluateCustomerRisk
+      summary: Evaluate a customer's risk
+      description: |
+        Evaluates the customer's risk from a complete set of facts and records a new state of the
+        customer's risk profile: version 1 for a new customer number in the caller's booking centre,
+        one version higher otherwise. A re-evaluation replaces every input of the previous one; nothing
+        is carried over (BR-13). An evaluation never lowers a decided track (BR-31).
+
+        **Roles:** `ONBOARDING_SYSTEM` only.
+
+        **Order of judgement** (spec, command 1): caller identified (401) · role (403) · request not
+        too large (413) · request readable (400) · customer number missing, too long, control character
+        · profile class · every country (residence, citizenships, birth, login) · no citizenship · too
+        many citizenships · geographic risk class of each rated country · channel · product request ·
+        adverse media class · critical facts (all 400) · no concurrent change (409).
+      x-permitted-roles: [ONBOARDING_SYSTEM]
+      requestBody:
+        required: true
+        x-max-body-bytes: 65536
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationRequest'
+            examples:
+              E3:
+                summary: Politically exposed person, login from another country (spec example E3)
+                value:
+                  profileClass: POLITICALLY_EXPOSED
+                  residence: {country: DE, riskClass: LOW}
+                  citizenships:
+                    - {country: AE, riskClass: LOW}
+                  birth: {country: DE, riskClass: LOW}
+                  loginCountry: AE
+                  channel: REMOTE
+                  highRiskProductRequest: true
+                  adverseMediaClass: UNCONFIRMED_FINANCIAL_CRIME
+                  sanctionsMatch: false
+                  terroristLink: false
+                  forgedIdentity: false
+              E7:
+                summary: A confirmed sanctions-list match (spec example E7)
+                value:
+                  profileClass: INDIVIDUAL_EMPLOYED
+                  residence: {country: DE, riskClass: LOW}
+                  citizenships:
+                    - {country: DE, riskClass: LOW}
+                  birth: {country: DE, riskClass: LOW}
+                  loginCountry: DE
+                  channel: BRANCH
+                  highRiskProductRequest: false
+                  adverseMediaClass: NONE
+                  sanctionsMatch: true
+                  terroristLink: false
+                  forgedIdentity: false
+      responses:
+        '200':
+          description: Evaluated. The new state is recorded at the version returned.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskVersionResponse'
+              example:
+                customerNumber: C-3
+                version: 1
+        '400':
+          description: The request is not readable, or an input breaks its rule (BR-06 to BR-12, D-10, D-12).
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/EvaluationInputProblem'
+              examples:
+                requestNotReadable:
+                  value:
+                    type: urn:problem-type:risk:request-not-readable
+                    title: Bad Request
+                    status: 400
+                    detail: The request is not a single readable JSON object.
+                    instance: /api/risk-profiles/evaluations
+                countryInvalid:
+                  value:
+                    type: urn:problem-type:risk:country-invalid
+                    title: Bad Request
+                    status: 400
+                    detail: A country code is not a valid ISO 3166-1 code.
+                    instance: /api/risk-profiles/evaluations
+                criticalFactMissing:
+                  summary: For example `"terroristLink":0`, which is not a boolean
+                  value:
+                    type: urn:problem-type:risk:critical-fact-missing
+                    title: Bad Request
+                    status: 400
+                    detail: A critical fact answer is missing.
+                    instance: /api/risk-profiles/evaluations
+        '401':
+          description: The caller is not identified (BR-01). Today, every call.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CallerNotIdentifiedProblem'
+              example:
+                type: urn:problem-type:risk:caller-not-identified
+                title: Unauthorized
+                status: 401
+                detail: The caller could not be identified.
+                instance: /api/risk-profiles/evaluations
+        '403':
+          description: The caller's role may not evaluate (BR-02). Decided before the body is read.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/PermissionDeniedProblem'
+              example:
+                type: urn:problem-type:risk:permission-denied
+                title: Forbidden
+                status: 403
+                detail: The role FRONT_OFFICE may not evaluate customer risk.
+                instance: /api/risk-profiles/evaluations
+        '409':
+          description: Another change of the same risk profile was recorded first (BR-30). Evaluate again.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/EvaluationConflictProblem'
+              example:
+                type: urn:problem-type:risk:risk-profile-changed-concurrently
+                title: Conflict
+                status: 409
+                detail: The risk profile was changed at the same time. Evaluate again.
+                instance: /api/risk-profiles/evaluations
+        '413':
+          description: The body is larger than 65 536 bytes (D-09). Refused without reading further.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/RequestTooLargeProblem'
+              example:
+                type: urn:problem-type:risk:request-too-large
+                title: Content Too Large
+                status: 413
+                detail: The request is too large.
+                instance: /api/risk-profiles/evaluations
+
+  /api/risk-profiles/{customerNumber}/decisions:
+    parameters:
+      - $ref: '#/components/parameters/CustomerNumber'
+    post:
+      tags: [Compliance decisions]
+      operationId: recordComplianceDecision
+      summary: Record a compliance decision
+      description: |
+        Records a decision on the customer's risk, guarded by the version the deciding person was
+        looking at (BR-33), and records a new state one version higher. `FREEZE_ASSETS` sets the
+        decided track to Red, `ESCALATE_EDD` to Orange, `CLEAR_FALSE_POSITIVE` removes it (BR-32). The
+        decision changes neither the score nor the explanation (BR-38).
+
+        **Roles:** `ESCALATE_EDD`: `AML_ANALYST_L1`, `AML_ANALYST_L2`, `MLRO`. `FREEZE_ASSETS` and
+        `CLEAR_FALSE_POSITIVE`: `AML_ANALYST_L2`, `MLRO`. The role is judged on the kind, before the
+        kind is judged: a kind that is not recognised is judged as `FREEZE_ASSETS`, the narrowest
+        permission, so only a caller who may freeze is told the kind is not recognised (D-08).
+
+        **Order of judgement** (BR-37): caller identified (401) · request not too large (413) · request
+        readable (400) · role for the kind (403) · kind recognised (400) · customer found in the caller's
+        booking centre (404) · justification missing, too short, too long, control character (400) ·
+        version viewed valid (400) · version viewed still current (409) · critical fact in force,
+        already frozen, already escalated, nothing to clear (422) · no concurrent change (409).
+      x-permitted-roles: [AML_ANALYST_L1, AML_ANALYST_L2, MLRO]
+      requestBody:
+        required: true
+        x-max-body-bytes: 16384
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+            examples:
+              freeze:
+                value:
+                  kind: FREEZE_ASSETS
+                  justification: Analyst reviewed the alert and the documents
+                  versionViewed: 1
+              clear:
+                value:
+                  kind: CLEAR_FALSE_POSITIVE
+                  justification: "The match was a namesake.\nPassport checked against the list entry."
+                  versionViewed: 5
+      responses:
+        '200':
+          description: Recorded. The new state is at the version returned.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskVersionResponse'
+              example:
+                customerNumber: C-3
+                version: 2
+        '400':
+          description: The request is not readable, the kind is not recognised, or the justification or version viewed breaks its rule (BR-32 to BR-34, D-12).
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/DecisionInputProblem'
+              examples:
+                kindNotRecognised:
+                  summary: Only a caller who may freeze assets gets this answer
+                  value:
+                    type: urn:problem-type:risk:decision-kind-not-recognised
+                    title: Bad Request
+                    status: 400
+                    detail: The decision kind is not recognised.
+                    instance: /api/risk-profiles/decisions
+                versionViewedNotValid:
+                  summary: For example `"versionViewed":1.9`
+                  value:
+                    type: urn:problem-type:risk:version-viewed-not-valid
+                    title: Bad Request
+                    status: 400
+                    detail: The version viewed is not a valid version.
+                    instance: /api/risk-profiles/decisions
+        '401':
+          description: The caller is not identified (BR-01). Today, every call.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CallerNotIdentifiedProblem'
+              example:
+                type: urn:problem-type:risk:caller-not-identified
+                title: Unauthorized
+                status: 401
+                detail: The caller could not be identified.
+                instance: /api/risk-profiles/decisions
+        '403':
+          description: The caller's role may not record this kind of decision (BR-02, D-08).
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/PermissionDeniedProblem'
+              example:
+                type: urn:problem-type:risk:permission-denied
+                title: Forbidden
+                status: 403
+                detail: The role AML_ANALYST_L1 may not record this decision.
+                instance: /api/risk-profiles/decisions
+        '404':
+          description: No risk profile of this customer number in the caller's booking centre (BR-04). Also a number that cannot be a customer number.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CustomerNotFoundProblem'
+              example:
+                type: urn:problem-type:risk:customer-not-found
+                title: Not Found
+                status: 404
+                detail: The customer was not found.
+                instance: /api/risk-profiles/decisions
+        '409':
+          description: The profile changed after it was viewed (BR-33), or at the same time (BR-30). Nothing is recorded; view it again.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/DecisionConflictProblem'
+              examples:
+                changedSinceViewed:
+                  value:
+                    type: urn:problem-type:risk:risk-profile-changed-since-viewed
+                    title: Conflict
+                    status: 409
+                    detail: The risk profile changed after it was viewed. View it again.
+                    instance: /api/risk-profiles/decisions
+                changedConcurrently:
+                  value:
+                    type: urn:problem-type:risk:risk-profile-changed-concurrently
+                    title: Conflict
+                    status: 409
+                    detail: The risk profile was changed at the same time. Try again.
+                    instance: /api/risk-profiles/decisions
+        '413':
+          description: The body is larger than 16 384 bytes (D-09). Refused without reading further.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/RequestTooLargeProblem'
+              example:
+                type: urn:problem-type:risk:request-too-large
+                title: Content Too Large
+                status: 413
+                detail: The request is too large.
+                instance: /api/risk-profiles/decisions
+        '422':
+          description: |
+            The decision breaks a decision rule. `critical-fact-in-force`: clearing while the latest
+            evaluation has a critical fact (BR-36). `already-frozen`, `already-escalated`,
+            `nothing-to-clear`: the decision changes nothing, judged on the decided track, not the
+            effective one (BR-35).
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/DecisionRuleProblem'
+              examples:
+                alreadyFrozen:
+                  value:
+                    type: urn:problem-type:risk:already-frozen
+                    title: Unprocessable Entity
+                    status: 422
+                    detail: The customer's assets are already frozen.
+                    instance: /api/risk-profiles/decisions
+                criticalFactInForce:
+                  value:
+                    type: urn:problem-type:risk:critical-fact-in-force
+                    title: Unprocessable Entity
+                    status: 422
+                    detail: A critical fact is in force, so the customer cannot be cleared.
+                    instance: /api/risk-profiles/decisions
+
+  /api/risk-profiles/{customerNumber}:
+    parameters:
+      - $ref: '#/components/parameters/CustomerNumber'
+    get:
+      tags: [Views]
+      operationId: getComplianceRiskView
+      summary: Read the compliance view of a customer's risk
+      description: |
+        Everything in the customer's current risk profile (spec, query 1): the policy applied, the
+        scores and their explanation, the tracks and the restriction, the critical facts in force, the
+        latest decision, and the version a decision must quote as `versionViewed`. The current state
+        only (BR-29); no internal identifier (D-05).
+
+        The view is filled from recorded events shortly after each change. Right after a successful
+        evaluation or decision it can still show the previous state, or 404 for a new customer; the
+        `version` tells which state it shows.
+
+        **Roles:** `AML_ANALYST_L1`, `AML_ANALYST_L2`, `MLRO`.
+
+        **Order of judgement:** caller identified (401) · role (403) · customer found in the caller's
+        booking centre (404).
+      x-permitted-roles: [AML_ANALYST_L1, AML_ANALYST_L2, MLRO]
+      responses:
+        '200':
+          description: The current compliance view. Confidential (BR-43).
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceRiskView'
+              examples:
+                yellowAfterFreeze:
+                  summary: Spec example E3 after an L2 analyst froze assets on version 1
+                  value:
+                    customerNumber: C-3
+                    policy:
+                      jurisdiction: DE
+                      geographicWeight: 0.30
+                      profileWeight: 0.25
+                      mediaWeight: 0.25
+                      productsWeight: 0.20
+                      staticWeight: 1.00
+                      behaviouralWeight: 0.00
+                      strictMultiplier: 1.25
+                      yellowThreshold: 31.00
+                      orangeThreshold: 61.00
+                      redThreshold: 85.00
+                      strictForNonResidents: true
+                    totalScore: 51.00
+                    evaluatedTrack: YELLOW
+                    decidedTrack: RED
+                    effectiveTrack: RED
+                    restriction: ASSETS_FROZEN
+                    criticalFacts: []
+                    explanation:
+                      categories:
+                        - {category: GEOGRAPHIC, points: 30, weight: 0.30, contribution: 9.00}
+                        - {category: CUSTOMER_PROFILE, points: 70, weight: 0.25, contribution: 17.50}
+                        - {category: ADVERSE_MEDIA, points: 50, weight: 0.25, contribution: 12.50}
+                        - {category: PRODUCTS_AND_CHANNELS, points: 60, weight: 0.20, contribution: 12.00}
+                      drivers:
+                        - GEOGRAPHIC:LOGIN_COUNTRY_MISMATCH
+                        - CUSTOMER_PROFILE:POLITICALLY_EXPOSED
+                        - ADVERSE_MEDIA:UNCONFIRMED_FINANCIAL_CRIME
+                        - PRODUCTS_AND_CHANNELS:HIGH_RISK_PRODUCT_REQUEST
+                      staticScore: 51.00
+                      staticWeight: 1.00
+                      behaviouralScore: 0.00
+                      behaviouralWeight: 0.00
+                      multiplier: 1.00
+                      criticalFacts: []
+                      nonProfitFloorApplied: false
+                    latestDecision:
+                      kind: FREEZE_ASSETS
+                      decidedBy: actor-aml_analyst_l2
+                      decidedAt: '2026-11-27T21:52:53.811650917Z'
+                      justification: Analyst reviewed the alert and the documents
+                      versionTaken: 1
+                    evaluatedAt: '2026-11-27T21:52:53.552411Z'
+                    version: 2
+                sanctionsMatch:
+                  summary: Spec example E7, a critical fact in force
+                  value:
+                    customerNumber: C-7
+                    policy:
+                      jurisdiction: DE
+                      geographicWeight: 0.30
+                      profileWeight: 0.25
+                      mediaWeight: 0.25
+                      productsWeight: 0.20
+                      staticWeight: 1.00
+                      behaviouralWeight: 0.00
+                      strictMultiplier: 1.25
+                      yellowThreshold: 31.00
+                      orangeThreshold: 61.00
+                      redThreshold: 85.00
+                      strictForNonResidents: true
+                    totalScore: 100.00
+                    evaluatedTrack: RED
+                    decidedTrack: null
+                    effectiveTrack: RED
+                    restriction: ASSETS_FROZEN
+                    criticalFacts: [SANCTIONS_MATCH]
+                    explanation:
+                      categories:
+                        - {category: GEOGRAPHIC, points: 0, weight: 0.30, contribution: 0.00}
+                        - {category: CUSTOMER_PROFILE, points: 10, weight: 0.25, contribution: 2.50}
+                        - {category: ADVERSE_MEDIA, points: 0, weight: 0.25, contribution: 0.00}
+                        - {category: PRODUCTS_AND_CHANNELS, points: 10, weight: 0.20, contribution: 2.00}
+                      drivers:
+                        - CUSTOMER_PROFILE:INDIVIDUAL_EMPLOYED
+                        - PRODUCTS_AND_CHANNELS:BRANCH
+                        - CRITICAL_FACT:SANCTIONS_MATCH
+                      staticScore: 4.50
+                      staticWeight: 1.00
+                      behaviouralScore: 0.00
+                      behaviouralWeight: 0.00
+                      multiplier: 1.00
+                      criticalFacts: [SANCTIONS_MATCH]
+                      nonProfitFloorApplied: false
+                    latestDecision: null
+                    evaluatedAt: '2026-11-27T21:52:53.625363094Z'
+                    version: 1
+        '401':
+          description: The caller is not identified (BR-01). Today, every call.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CallerNotIdentifiedProblem'
+              example:
+                type: urn:problem-type:risk:caller-not-identified
+                title: Unauthorized
+                status: 401
+                detail: The caller could not be identified.
+                instance: /api/risk-profiles/compliance-view
+        '403':
+          description: The caller's role may not read the compliance view (BR-02, BR-39).
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/PermissionDeniedProblem'
+              example:
+                type: urn:problem-type:risk:permission-denied
+                title: Forbidden
+                status: 403
+                detail: The role FRONT_OFFICE may not view the compliance view.
+                instance: /api/risk-profiles/compliance-view
+        '404':
+          description: No risk profile of this customer number in the caller's booking centre (BR-04). Also a number that cannot be a customer number.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CustomerNotFoundProblem'
+              example:
+                type: urn:problem-type:risk:customer-not-found
+                title: Not Found
+                status: 404
+                detail: The customer was not found.
+                instance: /api/risk-profiles/compliance-view
+
+  /api/risk-profiles/{customerNumber}/front-office-status:
+    parameters:
+      - $ref: '#/components/parameters/CustomerNumber'
+    get:
+      tags: [Views]
+      operationId: getFrontOfficeStatus
+      summary: Read the neutral front-office status
+      description: |
+        The only thing branch and call-centre staff may see (spec, query 2; BR-40): `ACTIVE` when the
+        effective track is Green, otherwise `VERIFICATION_PENDING`, each with its fixed message. Yellow,
+        Orange and Red cannot be told apart, and no refusal of this operation refers to risk (BR-41).
+        Filled from recorded events, like the compliance view.
+
+        **Roles:** every identified caller.
+
+        **Order of judgement:** caller identified (401) · customer found in the caller's booking centre
+        (404).
+      x-permitted-roles: [ONBOARDING_SYSTEM, AML_ANALYST_L1, AML_ANALYST_L2, MLRO, FRONT_OFFICE]
+      responses:
+        '200':
+          description: The neutral status.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontOfficeStatusView'
+              examples:
+                verificationPending:
+                  value:
+                    customerNumber: C-3
+                    status: VERIFICATION_PENDING
+                    message: Standard administrative verification of documentation is in progress.
+                active:
+                  value:
+                    customerNumber: C-1
+                    status: ACTIVE
+                    message: Account active – no operational restrictions.
+        '401':
+          description: The caller is not identified (BR-01). Today, every call.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CallerNotIdentifiedProblem'
+              example:
+                type: urn:problem-type:risk:caller-not-identified
+                title: Unauthorized
+                status: 401
+                detail: The caller could not be identified.
+                instance: /api/risk-profiles/front-office-status
+        '404':
+          description: No risk profile of this customer number in the caller's booking centre (BR-04).
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CustomerNotFoundProblem'
+              example:
+                type: urn:problem-type:risk:customer-not-found
+                title: Not Found
+                status: 404
+                detail: The customer was not found.
+                instance: /api/risk-profiles/front-office-status
+
+components:
+  parameters:
+    CustomerNumber:
+      name: customerNumber
+      in: path
+      required: true
+      description: |
+        The customer's core-banking number, exactly as supplied (BR-06): 1 to 64 Unicode code points
+        and no control character (Unicode Cc). It is compared exactly, so letter case and spaces
+        matter. Send it as one percent-encoded (UTF-8) path segment. A `;` is part of the number, not a
+        matrix parameter. On the evaluation, a number that breaks BR-06 gets its own 400; on the other
+        three operations it names no profile, so the answer is 404 `customer-not-found`.
+      schema:
+        $ref: '#/components/schemas/CustomerNumber'
+
+  headers:
+    NoStore:
+      description: Always `no-store`. No answer of this service may be kept by a browser or a proxy.
+      required: true
+      schema:
+        type: string
+        const: no-store
+
+  schemas:
+    CustomerNumber:
+      type: string
+      minLength: 1
+      maxLength: 64
+      not:
+        description: Contains a control character (Unicode Cc).
+        pattern: '[\u0000-\u001F\u007F-\u009F]'
+      examples: [C-3]
+
+    CountryCode:
+      type: string
+      pattern: '^[A-Z]{2}$'
+      description: |
+        An assigned ISO 3166-1 alpha-2 code, upper case, as the JDK lists them
+        (`Locale.getISOCountries()`). A well-formed code that is not assigned, such as `XX`, is
+        refused as `country-invalid`.
+      examples: [DE]
+
+    GeographicRiskClass:
+      type: string
+      enum: [LOW, FATF_GREY_LIST, FATF_BLACK_LIST_OR_CONFLICT_ZONE]
+      description: The risk class of a country, supplied with the evaluation (BR-09, BR-14).
+
+    RatedCountry:
+      type: object
+      required: [country, riskClass]
+      properties:
+        country:
+          $ref: '#/components/schemas/CountryCode'
+        riskClass:
+          $ref: '#/components/schemas/GeographicRiskClass'
+
+    CustomerProfileClass:
+      type: string
+      enum:
+        - INDIVIDUAL_EMPLOYED
+        - INDIVIDUAL_STUDENT_OR_NO_INCOME
+        - POLITICALLY_EXPOSED
+        - COMPLEX_OFFSHORE_OR_TRUST
+        - CROSS_BORDER_NON_PROFIT
+      description: The kind of customer (BR-07, BR-15).
+
+    OnboardingChannel:
+      type: string
+      enum: [BRANCH, REMOTE]
+
+    AdverseMediaClass:
+      type: string
+      enum: [NONE, UNCONFIRMED_FINANCIAL_CRIME, RADICALISATION_OR_PARAMILITARY]
+      description: What adverse-media screening found (BR-11, BR-16).
+
+    EvaluationRequest:
+      type: object
+      description: |
+        A complete set of facts; every field is required (BR-07 to BR-12). Unknown fields are ignored.
+        A citizenship that is not an object keeps its place and is refused as `country-invalid`.
+      required:
+        - profileClass
+        - residence
+        - citizenships
+        - birth
+        - loginCountry
+        - channel
+        - highRiskProductRequest
+        - adverseMediaClass
+        - sanctionsMatch
+        - terroristLink
+        - forgedIdentity
+      properties:
+        profileClass:
+          $ref: '#/components/schemas/CustomerProfileClass'
+        residence:
+          $ref: '#/components/schemas/RatedCountry'
+        citizenships:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/RatedCountry'
+          description: One to 10 citizenships (BR-08, D-10).
+        birth:
+          $ref: '#/components/schemas/RatedCountry'
+        loginCountry:
+          $ref: '#/components/schemas/CountryCode'
+        channel:
+          $ref: '#/components/schemas/OnboardingChannel'
+        highRiskProductRequest:
+          type: boolean
+          description: Fast international transfers, prepaid cards, or links to crypto-asset service providers.
+        adverseMediaClass:
+          $ref: '#/components/schemas/AdverseMediaClass'
+        sanctionsMatch:
+          type: boolean
+          description: A confirmed match on a sanctions or terrorist list (critical fact).
+        terroristLink:
+          type: boolean
+          description: A documented link to a terrorist organisation (critical fact).
+        forgedIdentity:
+          type: boolean
+          description: A forged identity document, or a substituted person linked to a blocked device (critical fact).
+
+    DecisionKind:
+      type: string
+      enum: [FREEZE_ASSETS, ESCALATE_EDD, CLEAR_FALSE_POSITIVE]
+
+    DecisionRequest:
+      type: object
+      required: [kind, justification, versionViewed]
+      description: Unknown fields are ignored.
+      properties:
+        kind:
+          $ref: '#/components/schemas/DecisionKind'
+        justification:
+          type: string
+          minLength: 20
+          maxLength: 2000
+          not:
+            description: Contains a control character that is not part of a line break.
+            pattern: '[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F-\u009F]|\r(?!\n)'
+          description: |
+            20 to 2 000 Unicode code points (BR-34). Line breaks (LF, or CR immediately followed by LF)
+            are allowed; no other control character is.
+        versionViewed:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The `version` of the compliance view the deciding person was looking at (BR-33).
+
+    RiskVersionResponse:
+      type: object
+      required: [customerNumber, version]
+      properties:
+        customerNumber:
+          $ref: '#/components/schemas/CustomerNumber'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The version of the risk profile after this change.
+
+    Decimal2:
+      type: number
+      description: A decimal with exactly two places, for example `51.00`.
+
+    Score:
+      allOf:
+        - $ref: '#/components/schemas/Decimal2'
+      minimum: 0
+      maximum: 100
+
+    RiskTrack:
+      type: string
+      enum: [GREEN, YELLOW, ORANGE, RED]
+      description: From the lowest to the highest risk (BR-24).
+
+    AccountRestriction:
+      type: string
+      enum: [ACTIVE, SOFT_LIMITS, EDD_HOLD, ASSETS_FROZEN]
+      description: What the effective track means for the account (BR-28).
+
+    CriticalFact:
+      type: string
+      enum: [SANCTIONS_MATCH, TERRORIST_LINK, FORGED_IDENTITY]
+
+    Jurisdiction:
+      type: string
+      enum: [US, GB, DE]
+
+    JurisdictionPolicy:
+      type: object
+      description: The policy this evaluation applied, recorded with it (BR-19, BR-27).
+      required:
+        - jurisdiction
+        - geographicWeight
+        - profileWeight
+        - mediaWeight
+        - productsWeight
+        - staticWeight
+        - behaviouralWeight
+        - strictMultiplier
+        - yellowThreshold
+        - orangeThreshold
+        - redThreshold
+        - strictForNonResidents
+      properties:
+        jurisdiction:
+          $ref: '#/components/schemas/Jurisdiction'
+        geographicWeight:
+          $ref: '#/components/schemas/Decimal2'
+        profileWeight:
+          $ref: '#/components/schemas/Decimal2'
+        mediaWeight:
+          $ref: '#/components/schemas/Decimal2'
+        productsWeight:
+          $ref: '#/components/schemas/Decimal2'
+        staticWeight:
+          $ref: '#/components/schemas/Decimal2'
+        behaviouralWeight:
+          $ref: '#/components/schemas/Decimal2'
+        strictMultiplier:
+          $ref: '#/components/schemas/Decimal2'
+        yellowThreshold:
+          $ref: '#/components/schemas/Score'
+        orangeThreshold:
+          $ref: '#/components/schemas/Score'
+        redThreshold:
+          $ref: '#/components/schemas/Score'
+        strictForNonResidents:
+          type: boolean
+
+    FactorCategory:
+      type: string
+      enum: [GEOGRAPHIC, CUSTOMER_PROFILE, ADVERSE_MEDIA, PRODUCTS_AND_CHANNELS]
+
+    CategoryContribution:
+      type: object
+      required: [category, points, weight, contribution]
+      properties:
+        category:
+          $ref: '#/components/schemas/FactorCategory'
+        points:
+          type: integer
+          minimum: 0
+          maximum: 100
+        weight:
+          $ref: '#/components/schemas/Decimal2'
+        contribution:
+          allOf:
+            - $ref: '#/components/schemas/Decimal2'
+          description: Points times weight, not rounded.
+
+    Driver:
+      type: string
+      description: A fact that produced points, as `CATEGORY:FACT`.
+      enum:
+        - GEOGRAPHIC:FATF_GREY_LIST
+        - GEOGRAPHIC:FATF_BLACK_LIST_OR_CONFLICT_ZONE
+        - GEOGRAPHIC:LOGIN_COUNTRY_MISMATCH
+        - CUSTOMER_PROFILE:INDIVIDUAL_EMPLOYED
+        - CUSTOMER_PROFILE:INDIVIDUAL_STUDENT_OR_NO_INCOME
+        - CUSTOMER_PROFILE:POLITICALLY_EXPOSED
+        - CUSTOMER_PROFILE:COMPLEX_OFFSHORE_OR_TRUST
+        - CUSTOMER_PROFILE:CROSS_BORDER_NON_PROFIT
+        - ADVERSE_MEDIA:UNCONFIRMED_FINANCIAL_CRIME
+        - ADVERSE_MEDIA:RADICALISATION_OR_PARAMILITARY
+        - PRODUCTS_AND_CHANNELS:BRANCH
+        - PRODUCTS_AND_CHANNELS:REMOTE
+        - PRODUCTS_AND_CHANNELS:HIGH_RISK_PRODUCT_REQUEST
+        - CRITICAL_FACT:SANCTIONS_MATCH
+        - CRITICAL_FACT:TERRORIST_LINK
+        - CRITICAL_FACT:FORGED_IDENTITY
+
+    Explanation:
+      type: object
+      description: |
+        Why the total is what it is (BR-26). The total recomputes from this alone: the sum of the
+        category contributions is `staticScore`, and the total is
+        min(100, (staticWeight · staticScore + behaviouralWeight · behaviouralScore) · multiplier),
+        rounded half-up to two places once, or 100 when a critical fact is in force.
+      required:
+        - categories
+        - drivers
+        - staticScore
+        - staticWeight
+        - behaviouralScore
+        - behaviouralWeight
+        - multiplier
+        - criticalFacts
+        - nonProfitFloorApplied
+      properties:
+        categories:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/CategoryContribution'
+          description: One entry per category, in the order GEOGRAPHIC, CUSTOMER_PROFILE, ADVERSE_MEDIA, PRODUCTS_AND_CHANNELS.
+        drivers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Driver'
+        staticScore:
+          $ref: '#/components/schemas/Score'
+        staticWeight:
+          $ref: '#/components/schemas/Decimal2'
+        behaviouralScore:
+          allOf:
+            - $ref: '#/components/schemas/Score'
+          description: Always 0.00 in this increment (BR-20).
+        behaviouralWeight:
+          $ref: '#/components/schemas/Decimal2'
+        multiplier:
+          allOf:
+            - $ref: '#/components/schemas/Decimal2'
+          description: 1.00, or 1.25 for a non-resident where the policy is stricter (BR-21).
+        criticalFacts:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/CriticalFact'
+        nonProfitFloorApplied:
+          type: boolean
+          description: Whether BR-25 raised the evaluated track to Orange.
+
+    DecisionRecord:
+      type: object
+      description: The latest compliance decision (BR-38).
+      required: [kind, decidedBy, decidedAt, justification, versionTaken]
+      properties:
+        kind:
+          $ref: '#/components/schemas/DecisionKind'
+        decidedBy:
+          type: string
+          description: The identity of the deciding caller.
+        decidedAt:
+          type: string
+          format: date-time
+        justification:
+          type: string
+        versionTaken:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The version the decision was taken on.
+
+    ComplianceRiskView:
+      type: object
+      description: The current state of a customer's risk profile. Confidential (BR-43).
+      required:
+        - customerNumber
+        - policy
+        - totalScore
+        - evaluatedTrack
+        - decidedTrack
+        - effectiveTrack
+        - restriction
+        - criticalFacts
+        - explanation
+        - latestDecision
+        - evaluatedAt
+        - version
+      properties:
+        customerNumber:
+          $ref: '#/components/schemas/CustomerNumber'
+        policy:
+          $ref: '#/components/schemas/JurisdictionPolicy'
+        totalScore:
+          $ref: '#/components/schemas/Score'
+        evaluatedTrack:
+          $ref: '#/components/schemas/RiskTrack'
+        decidedTrack:
+          description: The track set by a compliance decision; `null` when none is in force.
+          oneOf:
+            - $ref: '#/components/schemas/RiskTrack'
+            - type: 'null'
+        effectiveTrack:
+          allOf:
+            - $ref: '#/components/schemas/RiskTrack'
+          description: The decided track while one exists and it is not lower than the evaluated track; otherwise the evaluated track (BR-31).
+        restriction:
+          $ref: '#/components/schemas/AccountRestriction'
+        criticalFacts:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/CriticalFact'
+          description: The critical facts in force; empty when none.
+        explanation:
+          $ref: '#/components/schemas/Explanation'
+        latestDecision:
+          description: '`null` until a decision is recorded.'
+          oneOf:
+            - $ref: '#/components/schemas/DecisionRecord'
+            - type: 'null'
+        evaluatedAt:
+          type: string
+          format: date-time
+          description: The moment of the latest evaluation.
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Quote it as `versionViewed` when deciding (BR-33).
+
+    FrontOfficeStatusView:
+      type: object
+      description: |
+        `ACTIVE` always comes with "Account active – no operational restrictions.", and
+        `VERIFICATION_PENDING` with "Standard administrative verification of documentation is in
+        progress." (BR-40).
+      required: [customerNumber, status, message]
+      properties:
+        customerNumber:
+          $ref: '#/components/schemas/CustomerNumber'
+        status:
+          type: string
+          enum: [ACTIVE, VERIFICATION_PENDING]
+        message:
+          type: string
+          enum:
+            - Account active – no operational restrictions.
+            - Standard administrative verification of documentation is in progress.
+
+    Problem:
+      type: object
+      description: An RFC 9457 problem. Branch on `type` only.
+      required: [type, title, status, detail, instance]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: '`urn:problem-type:risk:<code>`.'
+        title:
+          type: string
+          description: The HTTP reason phrase of `status`.
+        status:
+          type: integer
+        detail:
+          type: string
+          description: A constant sentence per `type`.
+        instance:
+          type: string
+          format: uri-reference
+          description: A constant per operation; never the request path.
+          enum:
+            - /api/risk-profiles/evaluations
+            - /api/risk-profiles/decisions
+            - /api/risk-profiles/compliance-view
+            - /api/risk-profiles/front-office-status
+            - /api/risk-profiles
+
+    CallerNotIdentifiedProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - properties:
+            type:
+              const: urn:problem-type:risk:caller-not-identified
+            status:
+              const: 401
+
+    PermissionDeniedProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - properties:
+            type:
+              const: urn:problem-type:risk:permission-denied
+            status:
+              const: 403
+      description: '`detail` names the caller''s own role, which identifies nobody.'
+
+    CustomerNotFoundProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - properties:
+            type:
+              const: urn:problem-type:risk:customer-not-found
+            status:
+              const: 404
+
+    RequestTooLargeProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - properties:
+            type:
+              const: urn:problem-type:risk:request-too-large
+            status:
+              const: 413
+
+    EvaluationInputProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - properties:
+            type:
+              enum:
+                - urn:problem-type:risk:request-not-readable
+                - urn:problem-type:risk:customer-number-missing
+                - urn:problem-type:risk:customer-number-too-long
+                - urn:problem-type:risk:customer-number-control-character
+                - urn:problem-type:risk:profile-class-not-recognised
+                - urn:problem-type:risk:country-invalid
+                - urn:problem-type:risk:no-citizenship
+                - urn:problem-type:risk:too-many-citizenships
+                - urn:problem-type:risk:geographic-class-invalid
+                - urn:problem-type:risk:channel-not-recognised
+                - urn:problem-type:risk:product-request-missing
+                - urn:problem-type:risk:adverse-media-class-not-recognised
+                - urn:problem-type:risk:critical-fact-missing
+            status:
+              const: 400
+
+    EvaluationConflictProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - properties:
+            type:
+              const: urn:problem-type:risk:risk-profile-changed-concurrently
+            status:
+              const: 409
+
+    DecisionInputProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - properties:
+            type:
+              enum:
+                - urn:problem-type:risk:request-not-readable
+                - urn:problem-type:risk:decision-kind-not-recognised
+                - urn:problem-type:risk:justification-missing
+                - urn:problem-type:risk:justification-too-short
+                - urn:problem-type:risk:justification-too-long
+                - urn:problem-type:risk:justification-control-character
+                - urn:problem-type:risk:version-viewed-not-valid
+            status:
+              const: 400
+
+    DecisionConflictProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - properties:
+            type:
+              enum:
+                - urn:problem-type:risk:risk-profile-changed-since-viewed
+                - urn:problem-type:risk:risk-profile-changed-concurrently
+            status:
+              const: 409
+
+    DecisionRuleProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - properties:
+            type:
+              enum:
+                - urn:problem-type:risk:critical-fact-in-force
+                - urn:problem-type:risk:already-frozen
+                - urn:problem-type:risk:already-escalated
+                - urn:problem-type:risk:nothing-to-clear
+            status:
+              const: 422
