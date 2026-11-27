@@ -51,6 +51,7 @@ owner's answers of 2026-11-07 recorded below.
 | D-36 | 2026-11-27 | D-26 extended: the container's refusals of a request that is not acceptable HTTP/1.1, given before any application code runs, are also accepted exceptions to D-24 (for example a missing or conflicting Host header, an invalid request line or URI, an unsupported protocol version, an unsupported Expect value or transfer coding, TRACE, and `OPTIONS *`). None depends on the token or reveals data. Every other answer before identification, `OPTIONS` on a route included, is a defect. |
 | D-37 | 2026-11-27 | All traffic of people goes through the BFF. The Operations role (D-30) is a person who signs in through the BFF like the other human roles; there is no other way in for Operations. Until the BFF exists (D-34), no quarantined event can be released: it stays quarantined and the customer's front-office status stays verification pending (BR-45). The onboarding system is not a person and keeps its direct internal route (D-17, D-19). |
 | D-38 | 2026-11-27 | A-32 confirmed: a release names the customer, not an event; it releases that customer's oldest quarantined event, so order is kept; it carries a justification under the rules of BR-34, which is kept in the release record of BR-46. |
+| D-39 | 2026-11-27 | Micrometer may be added to the service for the metric of BR-46 (quarantined events). The metric carries a count only, never a customer number, an event identity or any risk information (BR-43). |
 
 ## Scope
 
