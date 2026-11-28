@@ -118,7 +118,7 @@ class EvaluateCustomerRiskResource {
                     "The risk profile was changed at the same time. Evaluate again.");
             // Defence in depth: identify() already refuses such a caller. Same answer, same reason (BR-01).
             case Refusal.Rejected(EvaluateCustomerRiskError.BookingCentreUnknown _) ->
-                    ProblemResponses.notIdentified(INSTANCE);
+                    ProblemResponses.notIdentified();
         };
     }
 

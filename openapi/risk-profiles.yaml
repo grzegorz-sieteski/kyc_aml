@@ -1,0 +1,327 @@
+openapi: 3.1.0
+info:
+  title: KYC/AML customer risk scoring
+  version: 1.0.0
+  description: >
+    The risk module's four endpoints (specification commands 1 and 2, queries 1 and 2).
+    Callers are identified by a Microsoft Entra ID bearer token (D-13 to D-16). Booking centres are
+    decided by the caller's token; the request never names one. Every refusal is an RFC 7807 problem with
+    a constant `instance`, so no answer repeats a customer number. Confidential answers carry
+    `Cache-Control: no-store`. Onboarding calls this service from the internal network only (D-17).
+servers:
+  - url: "https://kyc-aml.internal.example"
+    description: "Placeholder: the real host is set at deployment."
+security:
+  - bearerAuth: []
+paths:
+  /api/risk-profiles/{customerNumber}/evaluations:
+    post:
+      operationId: evaluateCustomerRisk
+      summary: Evaluate a customer's risk (command 1). Onboarding system only.
+      parameters:
+        - $ref: '#/components/parameters/CustomerNumber'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluateCustomerRiskRequest'
+      responses:
+        '200':
+          description: The evaluation was recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskVersion'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/NotIdentified'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+  /api/risk-profiles/{customerNumber}/decisions:
+    post:
+      operationId: recordComplianceDecision
+      summary: Record a compliance decision (command 2). Permitted roles depend on the decision kind.
+      parameters:
+        - $ref: '#/components/parameters/CustomerNumber'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordComplianceDecisionRequest'
+      responses:
+        '200':
+          description: The decision was recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskVersion'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/NotIdentified'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /api/risk-profiles/{customerNumber}:
+    get:
+      operationId: getComplianceRiskView
+      summary: Compliance view of a customer's risk (query 1). Compliance roles only.
+      parameters:
+        - $ref: '#/components/parameters/CustomerNumber'
+      responses:
+        '200':
+          description: The compliance view.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceRiskView'
+        '401':
+          $ref: '#/components/responses/NotIdentified'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /api/risk-profiles/{customerNumber}/front-office-status:
+    get:
+      operationId: getFrontOfficeStatus
+      summary: Operational status for the front office (query 2). Contains no risk data (BR-40).
+      parameters:
+        - $ref: '#/components/parameters/CustomerNumber'
+      responses:
+        '200':
+          description: The status and its neutral message.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrontOfficeStatus'
+        '401':
+          $ref: '#/components/responses/NotIdentified'
+        '404':
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Entra ID access token, RS256, audience = the app's client id (accessTokenAcceptedVersion 2).
+  headers:
+    NoStore:
+      description: Confidential answer; never cached.
+      schema:
+        type: string
+        const: no-store
+  parameters:
+    CustomerNumber:
+      name: customerNumber
+      in: path
+      required: true
+      description: >
+        The customer's identifier in the bank's core system, unique within the caller's booking centre
+        (BR-05). At most 64 characters, no control character, compared exactly (BR-06). A literal `;` is
+        part of the number; percent-encoding keeps its meaning.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+  schemas:
+    EvaluateCustomerRiskRequest:
+      type: object
+      required: [profileClass, residence, citizenships, birth, loginCountry, channel,
+                 highRiskProductRequest, adverseMediaClass, sanctionsMatch, terroristLink, forgedIdentity]
+      additionalProperties: false
+      properties:
+        profileClass:
+          type: string
+          enum: [INDIVIDUAL_EMPLOYED, INDIVIDUAL_STUDENT_OR_NO_INCOME, POLITICALLY_EXPOSED,
+                 COMPLEX_OFFSHORE_OR_TRUST, CROSS_BORDER_NON_PROFIT]
+        residence:
+          $ref: '#/components/schemas/RatedCountry'
+        citizenships:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/RatedCountry'
+        birth:
+          $ref: '#/components/schemas/RatedCountry'
+        loginCountry:
+          type: string
+          pattern: '^[A-Z]{2}$'
+          description: ISO 3166-1 alpha-2.
+        channel:
+          type: string
+          enum: [BRANCH, REMOTE]
+        highRiskProductRequest:
+          type: boolean
+        adverseMediaClass:
+          type: string
+          enum: [NONE, UNCONFIRMED_FINANCIAL_CRIME, RADICALISATION_OR_PARAMILITARY]
+        sanctionsMatch:
+          type: boolean
+        terroristLink:
+          type: boolean
+        forgedIdentity:
+          type: boolean
+    RatedCountry:
+      type: object
+      required: [country, riskClass]
+      additionalProperties: false
+      properties:
+        country:
+          type: string
+          pattern: '^[A-Z]{2}$'
+        riskClass:
+          type: string
+          enum: [LOW, FATF_GREY_LIST, FATF_BLACK_LIST_OR_CONFLICT_ZONE]
+    RecordComplianceDecisionRequest:
+      type: object
+      required: [kind, justification, versionViewed]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [FREEZE_ASSETS, ESCALATE_EDD, CLEAR_FALSE_POSITIVE]
+        justification:
+          type: string
+          minLength: 20
+          maxLength: 2000
+          description: Line breaks allowed; no other control character (BR-34).
+        versionViewed:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The version the deciding person was looking at (BR-33).
+    RiskVersion:
+      type: object
+      required: [customerNumber, version]
+      properties:
+        customerNumber:
+          type: string
+        version:
+          type: integer
+          format: int64
+    FrontOfficeStatus:
+      type: object
+      required: [customerNumber, status, message]
+      properties:
+        customerNumber:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, VERIFICATION_PENDING]
+        message:
+          type: string
+          description: Neutral text (BR-40); never mentions risk (BR-41).
+    RiskTrack:
+      type: string
+      enum: [GREEN, YELLOW, ORANGE, RED]
+    ComplianceRiskView:
+      type: object
+      required: [customerNumber, policy, totalScore, evaluatedTrack, effectiveTrack, restriction,
+                 criticalFacts, explanation, evaluatedAt, version]
+      properties:
+        customerNumber:
+          type: string
+        policy:
+          type: string
+        totalScore:
+          type: string
+          description: Decimal string with two places, 0.00 to 100.00 (D-07).
+        evaluatedTrack:
+          $ref: '#/components/schemas/RiskTrack'
+        decidedTrack:
+          oneOf:
+            - $ref: '#/components/schemas/RiskTrack'
+            - type: 'null'
+          description: Null while no compliance decision stands (BR-31).
+        effectiveTrack:
+          $ref: '#/components/schemas/RiskTrack'
+        restriction:
+          type: string
+          enum: [ACTIVE, SOFT_LIMITS, EDD_HOLD, ASSETS_FROZEN]
+        criticalFacts:
+          type: array
+          items:
+            type: string
+            enum: [SANCTIONS_MATCH, TERRORIST_LINK, FORGED_IDENTITY]
+        explanation:
+          type: object
+          description: Category contributions and drivers (BR-27).
+          additionalProperties: true
+        latestDecision:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+          description: Kind, deciding person, time, justification, version taken (BR-38).
+        evaluatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    Problem:
+      type: object
+      description: RFC 7807 problem. `type` names the refusal (urn:problem-type:risk:code).
+      required: [type, title, status, detail, instance]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+          description: Constant text per refusal. Never a customer number or a score.
+        instance:
+          type: string
+          description: Constant per operation. Never the request path.
+  responses:
+    NotIdentified:
+      description: >
+        The caller is not identified (BR-01): no token, an invalid token, or claims that do not name exactly
+        one role and one booking centre in scope. The same answer in every case, so it reveals nothing.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            const: Bearer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: urn:problem-type:risk:caller-not-identified
+            title: Unauthorized
+            status: 401
+            detail: The caller could not be identified.
+            instance: /api/risk-profiles
+    Problem:
+      description: A refusal, as RFC 7807. The detail is constant text; instance is constant per operation.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'

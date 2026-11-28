@@ -1,0 +1,12 @@
+# Test-only values for the identity settings, which have no defaults in production (D-13).
+# Loaded in addition to src/main/resources/application.yml (classpath:/config/ has higher precedence).
+# Spring tests other than IdentityIT never send a token: they override ActorContextResolver.resolve().
+# IdentityIT replaces jwk-set-uri with its own local JWK set server.
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://login.microsoftonline.com/00000000-0000-0000-0000-0000000000aa/v2.0
+          audiences: api://kyc-aml-test
+          jwk-set-uri: http://127.0.0.1:9/unused-jwks

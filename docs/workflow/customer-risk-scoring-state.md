@@ -1,6 +1,6 @@
 # customer-risk-scoring
 
-Stage: 6 · Status: APPROVED; two low findings from the API contract (OAS-01, OAS-02) wait for stage 3
+Stage: 6 · Status: MERGED 2026-11-28 (main + branch funny-wozniak); full gate and a fresh review of the merge pending
 Updated: 2026-11-28
 
 ## Source
@@ -385,3 +385,124 @@ linter was not run (refused in this environment).
 | OAS-02 | Low | The view's `evaluatedAt` changes when a decision is projected, though no evaluation happened. The evaluation event carries the clock's nanoseconds; `command.risk_profile.evaluated_at` is a microsecond `TIMESTAMPTZ`, and a decision's event carries the value reloaded from it | `…53.552410932Z` before a freeze, `…53.552411Z` after it (rounded up) | stage 3: a failing test that a decision leaves `evaluatedAt` unchanged; the likely fix is one precision at the source (the clock port) |
 
 The contract describes what runs, OAS-01 included, and changes with the fix.
+
+## Identity source (2026-11-09): decisions D-13 to D-16
+
+Branch restarted from `main` after PR #1 was merged. Product owner: JWT bearer tokens (OAuth2 resource
+server) issued by Microsoft Entra ID; claim names configurable; exactly one role of this service per token,
+else 401. Spec D-13 to D-16 and BR-01; design: ADR addendum 2026-11-09 (3).
+
+Stage 3: `IdentityIT` and `IdentityClaimNamesIT` drive the real filter chain and resolver with RS256 tokens
+signed by JDK crypto and a JWK set served locally (`TestTokens`); `src/test/resources/config/application.yml`
+gives the other Spring tests test values. Failing, for the reason named: every token that should be accepted
+(7 cases) and the `WWW-Authenticate: Bearer` header. The 18 bad-token cases and the query/form cases pass
+already **only because today's resolver refuses everything**: they guard against over-acceptance once the
+resolver exists, and are to be proved by mutation after stage 4.
+Run: Surefire 343, 0 failures; Failsafe 189, 8 failures (all identity).
+Gate: `check-write-lock.sh red` reports FAIL ("./mvnw test PASSED") because it checks Surefire only and
+this round's failing tests are all integration tests; the RED evidence is the Failsafe run above. Gap in
+the script, recorded: a RED round made only of `*IT` cannot pass it.
+
+## Identity source: stage 4 done (2026-11-09)
+
+`57e7111`, `src/main/` and `pom.xml` only (the container restarted mid-round; the working tree survived and
+the developer's report was recovered from its transcript). Orchestrator's GREEN gate: src/test and docs
+untouched; 0 Checkstyle violations; Surefire 343, Failsafe 189, 0 failures; BUILD SUCCESS.
+
+Mutation check of the refusal tests, which had passed before any identity code existed: accepting the
+first of several roles, and allowing a query-string token, each fail `IdentityIT`. Removing `audiences`
+from the shipped `application.yml` failed nothing, because the ITs set it themselves; `ProductionIdentitySettingsTest`
+now pins the shipped settings and fails under that mutation.
+
+Developer's deviations, recorded in the ADR: three firewall allowances (`;`, encoded CR, LF) so BR-06 keeps
+being answered by the resources; Spring Security's `/.well-known/oauth-protected-resource` endpoint exists.
+
+## Identity reviews (2026-11-09): [CHANGES REQUIRED] from both; stage 3 for I-01 to I-10
+
+Both reviews agree on the critical one: an identity setting that is present but empty starts the service
+with the issuer or audience check missing (I-01). Also: the firewall still refused `%25`, `%2E`, U+2028 and
+U+2029 that BR-06 allows (I-03); two distinguishable 401s (I-04); a 500 when the key set is unreachable
+(I-05); one outbound key fetch per unknown `kid` (I-06); Spring Security's metadata endpoint reflecting host
+and path (I-07); a token without `exp` accepted (I-02). Design: ADR addendum 2026-11-09 (4).
+
+Stage 3 run (`verify` with failures ignored): Surefire 346, 1 failure; Failsafe 208, 14 failures, each a new
+case failing for the reason it names: startup with an empty setting succeeds (3), firewall 400 (4),
+unequal 401s (2), metadata endpoint served (2), no `exp` accepted (1), 25 fetches for 25 unknown key ids
+(1), 500 with keys unreachable (1), logging level unpinned (1). Already passing guards: `/logout`,
+`/login`, a non-text role element, a nested claim object.
+
+Open for the product owner, recorded in the ADR: how the onboarding system's app-only tokens carry a
+booking centre; ID tokens versus access tokens; who may write the booking-centre attribute.
+
+## Identity round 2: stage 4 done (2026-11-10)
+
+`src/main/` only. Orchestrator's GREEN gate: src/test and docs untouched; 0 Checkstyle violations; Surefire
+346, Failsafe 208, 0 failures; BUILD SUCCESS. Developer's choices are recorded in the ADR. Docker had to be
+restarted by hand after a container restart left a stale containerd pid.
+
+## Open items, pass 2026-11-11
+
+| Item | State |
+|---|---|
+| RelayPressureSpike fails when run by hand | fixed (`ALTER` of V3's columns removed); passes with Docker up |
+| OpenAPI contract for the four endpoints | written (`openapi/risk-profiles.yaml`), YAML valid, references resolved; contract tests not yet written |
+| BFF boundary | architect writes `docs/adr/bff-boundary.md` (in progress) |
+| Dead-letter | decided: spec D-18 and BR-44 to BR-46. Design and implementation not started; the releasing role is open for the product owner |
+| Identity: key-fetch trade-off (F1) | onboarding accepted internal-only (D-17); customer-facing via BFF; no code change |
+| Identity: open questions | ID token vs access token; who may write the booking-centre attribute; onboarding's booking centre (app-only tokens may carry no claim) |
+| Deferred technical | startup role check, max-swallow-size, error-code lookup under pool exhaustion, total-score CHECK: recorded in the ADR, not started |
+
+## BFF boundary ADR: audited, `[CHANGES REQUIRED]` (2026-11-11)
+
+Independent architect audit of `docs/adr/bff-boundary.md` (read-only, fresh context): 2 blockers, 9
+warnings. The blockers and the list are summarised at the top of the ADR. Next: product-owner answers
+(sign-in flow, onboarding's identity and booking centre, what a misprovisioned user sees, acceptance of
+internal key-fetch flooding, TLS on the internal hop), a spec decision for the calling-client rule, then
+a second ADR draft. No code is authorised.
+
+## BFF boundary ADR v2: second audit, `[CHANGES REQUIRED]` (2026-11-11)
+
+Four blockers: the rate-limit refusal is not served with last known keys (so F1 and D-21 are not closed in
+the flood case); mutual TLS does not reject an unregistered certificate from a trusted CA before the key
+fetch; the default outage window is 50 min, not 300 s; the BFF logs refusal codes against BR-43. The
+verdict and the test list are in the audit banner at the top of `docs/adr/bff-boundary-v2.md`. No code
+is authorised. Next: a third draft fixing the four blockers, then a further audit.
+
+## BFF boundary ADR v3: third audit, `[CHANGES REQUIRED]`, one blocker (2026-11-11)
+
+v2's four blockers are fixed in mechanism and verified in the Nimbus, Spring Security and Tomcat bytecode.
+One new blocker: a concurrency race in `LastKnownKeySetSource.remember` can stretch the D-21 window. Ten
+warnings, mostly test planning (mutual TLS in the ITs, clock control) and precision (exactly one role for
+onboarding, the outage WARN, map keys, certificate binding). Summary in the banner of
+`docs/adr/bff-boundary-v3.md`. Next: v4 fixing the blocker and warnings, then an audit.
+
+## BFF boundary ADR v4: fourth audit, `[CHANGES REQUIRED]`, one blocker (2026-11-11)
+
+The v3 race is fixed in mechanism. Blocker B1: decision-route log lines (route template and status) against
+BR-43; needs a product-owner answer or a log change. Warnings are listed in the banner of
+`docs/adr/bff-boundary-v4.md`. Also flagged: the main design defers quarantine (lines 310-311), which
+contradicts D-18 and BR-44 to BR-46. Next: v5 for the blocker and the test and startup warnings, then an audit.
+
+## BFF boundary ADR v5: fifth audit, `[CHANGES REQUIRED]`, one blocker (2026-11-11)
+
+Blocker: the role rule (ignoring non-ActorRole names; ONBOARDING_SYSTEM in a user token). D-19 settles the
+onboarding case; the other-names case is a product-owner question. Warnings listed in the banner of
+`docs/adr/bff-boundary-v5.md`. Next: v6 once the owner answers the role question.
+
+## BFF boundary ADR v6: sixth audit, `[CHANGES REQUIRED]` (2026-11-11)
+
+One blocker: the BFF answers 413 and 400 before identifying the caller (BR-37, BR-01, D-09); a business-rule
+decision is needed. Many warnings, listed in the banner of `docs/adr/bff-boundary-v6.md`. Bytecode-verified:
+the limiter, cache throw sites, propagation, placeholder regex, decoder composition and the role rule.
+
+## BFF boundary ADR v7: seventh audit, `[CHANGES REQUIRED]` (2026-11-26)
+
+Blocker: Expect: 100-continue cannot enforce D-24, because the JDK client sends the body after 5 s regardless,
+and identification can take longer. A product-owner choice is needed between buffering a bounded body at the
+BFF without judging it, and a two-step identify-then-send. Warnings in the banner of `docs/adr/bff-boundary-v7.md`.
+
+## BFF boundary ADR v8: eighth audit, `[CHANGES REQUIRED]` (2026-11-27)
+
+Service side of D-25 verified. Blocker: OPTIONS and some Tomcat protocol refusals answer before identification
+and are outside D-26. Product-owner input needed on the Tomcat refusals and on how the Operations role (D-30)
+is identified. Next: spec consistency fix for D-30, then v9 for this increment only (D-34).

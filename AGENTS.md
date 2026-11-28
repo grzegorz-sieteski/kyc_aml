@@ -13,7 +13,7 @@ Read this before anything else; `.github/copilot-instructions.md` holds the hard
 ./mvnw -B verify -DskipITs                           # skip ITs when Docker is unavailable
 ./mvnw -B test -Dtest=ArchitectureRulesTest          # architecture rules only
 ./mvnw -B test -Dtest=ResultTest                     # one test class
-./mvnw -B spring-boot:run                            # run locally (needs Postgres; DATABASE_* and FLYWAY_* env, D-11)
+./mvnw -B spring-boot:run                            # run locally (needs Postgres; DATABASE_*, FLYWAY_* and identity env)
 ```
 
 JDK 25 is required. Integration tests (`*IT.java`) need a running Docker daemon.
@@ -119,8 +119,10 @@ Be honest about this, because the distinction matters:
 - One business module exists: `risk` (customer risk scoring), specified from the ARGON analysis (an
   AML/KYC/CTF specification and architecture produced with Gemini and supplied by the product owner).
   `docs/workflow/customer-risk-scoring-state.md` records what each stage found. `ActorRole` carries
-  the KYC roles. There is no identity source yet: the resolver is fail-closed, so every call is 401
-  until one is chosen.
+  the KYC roles. Callers are identified by JWT bearer tokens from Microsoft Entra ID (D-13 to D-16):
+  `ISSUER_URI`, `TOKEN_AUDIENCE` and `JWK_SET_URI` are required, with no defaults; claim names are
+  `app.identity.*`. No token, an invalid one, or claims that do not name exactly one role and one
+  booking centre in scope: 401. Spring tests get test values from `src/test/resources/config/application.yml`.
 - **NullAway runs on `src/main` at compile time** (Error Prone 2.52 + NullAway 0.14.3). It needs the
   `--add-exports` flags in `.mvn/jvm.config`, which `./mvnw` picks up automatically. If you build
   with another Maven (IntelliJ's bundled one included), point it at that file or the compile fails
@@ -148,6 +150,12 @@ Be honest about this, because the distinction matters:
   Spring JDBC translate PostgreSQL errors by error code, so a lock timeout is transient and the outbox
   relay does not count it as a failed attempt. Deleting it breaks `OutboxTransientFailureIT`. When you
   test such a removal, delete the copy in `target/classes` too: `verify` without `clean` keeps it.
+- **Never set DEBUG or TRACE on `org.springframework.security`.** It logs request paths, which carry
+  customer numbers, and token validation detail (BR-43). `application.yml` pins it to INFO and
+  `ProductionIdentitySettingsTest` fails if that line goes.
+- An identity setting that is present but empty stops startup (`IdentitySettings`). Left to Spring Boot, an
+  empty issuer or audience silently drops that check. Entra: the audience is the app's client id GUID, and
+  the app registration needs `accessTokenAcceptedVersion: 2`.
 - **Never enable `spring.mvc.log-request-details`** together with DEBUG on `org.springframework.web`:
   `DispatcherServlet` would then read and log form bodies before the caller is identified (BR-01, BR-43).
 - **Deployment controls for D-11 (not enforced in code):** `FLYWAY_USERNAME` must differ from
@@ -155,5 +163,8 @@ Be honest about this, because the distinction matters:
   `pg_service.conf` `user=`, `options=-c role=` or pool init `SET ROLE` for the service connection; and
   `spring.flyway.locations`, `callback-locations`, `init-sqls`, `jdbc-properties` stay unset. Whoever
   controls `spring.flyway.*` holds the schema owner's power anyway (exhaustive review, 2026-11-09).
+- **Onboarding reaches this service only from the internal network (D-17).** Nothing from the internet may
+  route to it. This is a deployment control, and it is what accepts the key-fetch risk (F1) for onboarding.
+  Customer-facing callers go through the BFF (ADR, decision 2026-11-11).
 - Migrations run as the schema owner (`FLYWAY_USERNAME`), the service as a role that owns nothing
   (`DATABASE_USERNAME`); `V5` grants it its rights through the Flyway placeholder `service_role`.

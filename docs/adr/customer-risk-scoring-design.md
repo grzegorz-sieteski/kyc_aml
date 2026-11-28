@@ -951,3 +951,142 @@ RED gate of this round: `./mvnw test` fails on B.1; `./mvnw verify` also fails o
 - **Q-2.** BR-09 says "naming the country". The design reads it as BR-08 does, which rated country
   (residence, citizenship, birth), never the code sent, which would echo personal input (§6 of the spec,
   §10 here). Confirm.
+
+## Addendum 2026-11-09 (3): identity source (D-13 to D-16)
+
+**Mechanism.** Spring Security OAuth2 Resource Server with JWT (`spring-boot-starter-security` and the
+OAuth2 resource-server starter). Stateless: no session, no CSRF (bearer tokens only, no cookies), no form
+login, no HTTP Basic. Every request is let through the filter chain (`permitAll`): the decision stays in
+`OperationGate`, so the refusal order and the constant problems are unchanged. A request **without** a
+token reaches the resources as unauthenticated and is refused there as `caller-not-identified`. A
+request **with** an invalid token is refused by the resource-server filter; its `AuthenticationEntryPoint`
+and `AccessDeniedHandler` answer the same constant 401 problem (`urn:problem-type:risk:caller-not-identified`,
+`Cache-Control: no-store`, a `WWW-Authenticate: Bearer` header without error description). Nothing reads the
+body: the bearer token is taken from the `Authorization` header only; form-parameter and query-parameter
+tokens are explicitly disabled.
+
+**Token validation.** Signature (RS256 only) against the issuer's keys; `exp` and `nbf` with Spring's
+default clock skew; `iss` equal to the configured issuer; `aud` containing the configured audience. Configuration
+(Boot properties, no defaults for the security-relevant ones): `spring.security.oauth2.resourceserver.jwt.issuer-uri`
+(`ISSUER_URI`, for Entra `https://login.microsoftonline.com/<tenant>/v2.0`),
+`spring.security.oauth2.resourceserver.jwt.audiences` (`TOKEN_AUDIENCE`, the app's client id or App ID URI), and
+`spring.security.oauth2.resourceserver.jwt.jwk-set-uri` (`JWK_SET_URI`, for Entra
+`https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys`). The issuer is validated, never used for
+discovery at startup. The production path is used in tests too: `IdentityIT` serves a JWK set from a
+local HTTP server with a key generated at test time. `src/test/resources/config/application.yml` gives every
+other Spring test a test issuer, audience and an unused JWK set URI; they never send a token, because they
+override `resolve()`.
+
+**Claims → `AuthenticatedCaller`** (D-14), names in `app.identity.*`:
+
+| Property | Default | Entra ID setup |
+|---|---|---|
+| `app.identity.actor-claim` | `oid` | `oid`: the user's or service principal's object id, stable across apps |
+| `app.identity.role-claim` | `roles` | app roles; each app role's *value* is exactly an `ActorRole` name |
+| `app.identity.booking-centre-claim` | `booking_centre` | an optional claim from a directory extension attribute, renamed in the token configuration |
+
+The claim value must have the expected JSON type: the actor claim a string; the role claim a string or an
+array of strings; the booking-centre claim a string. Roles that are not `ActorRole` names are ignored;
+exactly one `ActorRole` must remain (D-15), else no caller. The booking centre must be a canonical UUID
+(`ActorContext.parse`) and in scope (`identify()`, D-16). Any other outcome is `Optional.empty()`, i.e. 401.
+
+**Where.** `ActorContextResolver.resolve()` reads the `JwtAuthenticationToken` from the security context
+(the tests' `@Primary` override of `resolve()` keeps working). A `SecurityFilterChain` bean and the claim
+mapping live in `risk/adapters/web` (or `risk/adapters/config` for the chain); no Spring Security type reaches
+`domain/`.
+
+**Not doing now.** mTLS for the onboarding system, token introspection, per-request revocation checks.
+
+### Recorded after stage 4 (identity)
+
+- **HTTP firewall.** Spring Security's `StrictHttpFirewall` refuses a literal `;` and encoded CR/LF before any
+  resource runs, which broke BR-06's own answers (R-03, R-26, the control-character refusal). The strict
+  firewall stays, with exactly those three allowances; the resources keep deciding as before.
+- **Protected-resource metadata.** Spring Security 7.1 always serves `GET /.well-known/oauth-protected-resource`
+  (no switch found in 7.1.2). It reads no body; whether its content is acceptable is for the security review.
+- **Shipped settings are pinned by a test** (`ProductionIdentitySettingsTest`): the ITs set issuer, audience
+  and keys themselves, so only this test notices if `application.yml` loses `audiences`.
+- `check-write-lock.sh red` checks Surefire only; a RED round made of `*IT` alone cannot pass it.
+
+---
+
+## Addendum 2026-11-09 (4): identity review findings (I-01 to I-10)
+
+Source: the stage 6 code and security reviews of `7bfb1cd..63e6fda`, both `[CHANGES REQUIRED]`.
+
+| I | Finding | Design |
+|---|---|---|
+| I-01 | An empty `ISSUER_URI`, `TOKEN_AUDIENCE` or `JWK_SET_URI` starts the service with that check absent (Boot adds the issuer and audience validators only for non-empty values; an empty JWK set URI falls back to issuer discovery) | Startup fails when any of the three is missing **or blank** (validated configuration properties). In depth, one extra token validator refuses every token unless the issuer is configured and equal, the audience list is non-empty and intersects, and `exp` is present |
+| I-02 | A token without `exp` is accepted (`JwtTimestampValidator` allows it) | Covered by the validator of I-01: `exp` is required |
+| I-03 | The firewall also refuses `%25`, `%2E` and U+2028/U+2029 in a customer number, which BR-06 allows and the resources answered before | Four more allowances (encoded percent, period, line separator, paragraph separator). The earlier note "exactly those three" is replaced: the firewall allows exactly what BR-06 needs, and still refuses `//`, `\\`, `%2F`, `%00`, traversal |
+| I-04 | Two distinguishable 401s: the filter's (instance `/api/risk-profiles`, `WWW-Authenticate`) and the resources' (route instance, no header) reveal whether a token passed validation | Every caller-not-identified answer is byte-identical: instance `/api/risk-profiles`, `WWW-Authenticate: Bearer`, `no-store`, on all four routes and from the filter |
+| I-05 | JWK set unreachable: a request with a token ends as 500 | D-13: anything else is not identified. The answer is the same constant 401; one WARN per occurrence names only the exception type. No token, URL or message in the log |
+| I-06 | Every token with an unknown `kid` forces an outbound JWK set fetch at the caller's rate | The decoder's key source is rate limited (Nimbus `JWKSourceBuilder` with rate limiting on) with short connect and read timeouts; an unknown `kid` inside the limit window is the constant 401 |
+| I-07 | `GET /.well-known/oauth-protected-resource/**` (Spring Security 7.1, no off switch) reflects host and path and claims mTLS-bound tokens | Answered by the constant 404 `request-not-handled`, like any unknown path, before Spring Security's metadata filter |
+| I-08 | DEBUG on `org.springframework.security` would log request paths (customer numbers) and validation detail | `logging.level.org.springframework.security: INFO` pinned in `application.yml` and by `ProductionIdentitySettingsTest`; ban recorded in AGENTS.md |
+| I-09 | Lines no test protects: a non-string element among the roles, `/logout`, a nested claim object | tests only |
+| I-10 | The comment says the audience is "the client id or App ID URI"; with the v2.0 issuer Entra puts the client id GUID in `aud` | comment corrected; `accessTokenAcceptedVersion: 2` noted as a deployment requirement |
+
+**Open for the product owner (not in this round):** how the onboarding *system* is identified. It will use
+app-only (client-credentials) tokens, and Entra emits directory-extension claims for users only, so such a
+token may carry no booking centre. Also whether ID tokens must be told apart from access tokens when a
+client and the API share one app registration, and who may write the directory attribute behind the
+booking-centre claim.
+
+### Recorded after stage 4 (identity round 2)
+
+- I-05: the WARN names the root cause's type (for example `ConnectException`); the outer type would always
+  be the same. A refresh refused by the rate limiter is an ordinary invalid token: constant 401, no WARN,
+  so a caller cannot write a log line per request.
+- I-06: Nimbus lets up to two fetches through per 30 s window. Connect and read timeouts are 2 s, constants
+  in code. The fetch uses `HttpURLConnection`, so it follows the JVM proxy properties.
+- I-07: the 404 filter is registered after `HeaderWriterFilter`, which puts it ahead of Spring Security's
+  metadata filter; that filter has no registered order to refer to.
+- Exercised for I-05: connection refused only. A read timeout or a malformed key set takes the same path, untested.
+
+### Identity re-review of round 2 (2026-11-11): one trade-off, open for the product owner
+
+Both reviews of `63e6fda..ddd1db1` agree on one finding, F1. The key-fetch budget (Nimbus
+`RateLimitedJWKSetSource`: one fetch per window, global, not per `kid`, 30 s window) is shared by all
+callers. A caller who sends tokens with random unknown `kid`s at about two requests per window keeps the
+budget spent, so a legitimately rotated signing key cannot be fetched for as long as the flood lasts.
+Legitimate callers then get the constant 401, with no log line. This is fail-closed, not a bypass. Keys
+already cached keep verifying until their 300 s TTL.
+
+The trade-off is inherent to the two options: without a limit, every unknown `kid` costs an outbound
+fetch (I-06 fails); with it, rotation can be delayed by a flood. Both reviewers propose keeping the
+last-known key set when a refresh is refused, which still needs a decision (it can serve a revoked key
+for up to the TTL). Not changed in this round; recorded as a known risk until the product owner decides.
+
+Also recorded from the same reviews, accepted as low: a request the firewall refuses gets 400 before any
+identification (the answer does not depend on the token); a header block over Tomcat's limit gets a
+Tomcat 400 before any filter. Both depend only on the request, not on the token, so neither is an oracle.
+
+Firewall negative tests (`RiskApiHardeningIT.Firewall`) for `%2F`, `%5C`, `%00`, `%2E%2E%2F`, `..%2F`,
+`//` and `%252F%2E%2E` pass with the current allowances: they guard against widening.
+
+### Decision 2026-11-11: F1 through a backend-for-frontend; LOW items accepted
+
+- **F1 (key-fetch budget shared by all callers).** Direction chosen by the product owner: a
+  backend-for-frontend (BFF) in front of this service. The browser or app talks to the BFF with its
+  session; only the BFF calls this service, and it sends tokens it obtained itself. This removes the public
+  surface where an unauthenticated caller can submit tokens with arbitrary `kid`s. What it does not remove:
+  the BFF's own key fetches (same budget logic, but no attacker input reaches it), and callers that are not
+  BFF-fronted (the onboarding system, machine to machine). For those, the open question stays: either
+  restrict them to the network path (mTLS or private network, a deployment control) or accept the F1 trade-off
+  for them. The architect writes the BFF boundary and its trust model in a separate ADR before any code.
+- **Firewall refusals before identification (LOW): accepted.** They do not depend on the token, so they are
+  no oracle. Denial of service through the firewall is not a threat model for this service.
+- **Tomcat refusal of an oversized header block (LOW): accepted.** Same reasoning; no container
+  configuration is changed for it. The business code stays the place where requirements are met.
+
+### Decision 2026-11-11 (2): the onboarding system is internal only
+
+Product owner (spec D-17): the onboarding system reaches this service only from the internal network, and
+nothing from the internet can reach it. Its risk classification is therefore lower than the customer-facing
+channels'. Consequence for F1: the key-fetch flood needs a caller who can already reach the internal network,
+and that risk is accepted for onboarding.
+
+This is a **deployment control**, not code: AGENTS.md lists it beside the D-11 controls. It must be enforced
+by the network (no route from outside to this service, or mTLS), and it must be checked at deployment.
+Customer-facing callers keep the BFF direction above.

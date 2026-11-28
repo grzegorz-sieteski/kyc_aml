@@ -505,4 +505,46 @@ class RiskApiHardeningIT {
                     HttpRequest.BodyPublishers.noBody()), 404, "customer-not-found");
         }
     }
+
+    // ============================================================================ I-03
+
+    @Nested
+    @DisplayName("I-03: the HTTP firewall refuses nothing that BR-06 allows in a customer number")
+    class Firewall {
+
+        @ParameterizedTest(name = "refused: {0}")
+        @org.junit.jupiter.params.provider.ValueSource(strings = {
+                "/api/risk-profiles/C%2FX/evaluations",
+                "/api/risk-profiles/C%5CX/evaluations",
+                "/api/risk-profiles/C%00X/evaluations",
+                "/api/risk-profiles/C%2E%2E%2FX/evaluations",
+                "/api/risk-profiles/..%2FX/evaluations",
+                "/api/risk-profiles//C-X/evaluations",
+                "/api/risk-profiles/C%252F%2E%2E/evaluations"})
+        @DisplayName("I-03: traversal, separators and NUL stay refused by the firewall, never reaching a resource")
+        void shouldStillRefuseTraversalAndSeparators(String path) throws Exception {
+            callAs(ActorRole.ONBOARDING_SYSTEM);
+
+            var answer = post(path, customer());
+
+            assertThat(answer.status()).as(answer.body()).isIn(400, 404);
+            assertThat(answer.body()).doesNotContain("\"status\":200").doesNotContain("customerNumber");
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @org.junit.jupiter.params.provider.CsvSource({
+                "C-PCT-%2550, C-PCT-%50",
+                "C-DOT-%2E1, C-DOT-.1",
+                "C-LS-%E2%80%A8x, C-LS-\u2028x",
+                "C-PS-%E2%80%A9x, C-PS-\u2029x"})
+        @DisplayName("an encoded percent, period, line separator or paragraph separator is part of the number")
+        void shouldLetTheResourceDecide(String rawPath, String expectedNumber) throws Exception {
+            callAs(ActorRole.ONBOARDING_SYSTEM);
+
+            var answer = evaluate(rawPath, customer());
+
+            assertThat(answer.status()).as(answer.body()).isEqualTo(200);
+            assertThat(versionOf(expectedNumber)).isEqualTo(1L);
+        }
+    }
 }
