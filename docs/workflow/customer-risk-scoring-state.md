@@ -1,7 +1,7 @@
 # customer-risk-scoring
 
 Stage: 6 · Status: APPROVED; two low findings from the API contract (OAS-01, OAS-02) wait for stage 3
-Updated: 2026-11-27
+Updated: 2026-11-28
 
 ## Source
 
@@ -64,8 +64,8 @@ As of 2026-11-27:
    decide how a refusal names its field (OAS-01).
 2. **`@test-designer`**, in a fresh chat: a failing test for OAS-02, one for OAS-01 once it is decided,
    and a contract test that checks the responses of `RiskApiFlowIT` against `openapi/`.
-3. **Open the pull request of this branch**, so CI runs once with the executable wrapper. No CI run has
-   passed yet.
+3. The phase write-lock job of CI has never run: it runs only on a pull request labelled with its
+   phase. The next stage's work should go through such a pull request, not straight to `main`.
 
 Still open for the product owner: the identity source and dead-letter handling of the outbox.
 
@@ -354,8 +354,10 @@ exhausted pool, the total-score `CHECK`, and `RelayPressureSpike` failing when r
 **CI had never run a build.** `mvnw` and `scripts/check-write-lock.sh` were committed as mode `100644`.
 All nine CI runs, from the initial commit to the merge of PR #1, failed at `./mvnw: Permission denied`
 (exit 126) before Maven started (job log of run 42654472570 checked). Every build result on this board
-was therefore a local run. Fixed in `74f82d8` (mode `100755`). CI runs only on pull requests and pushes to
-`main`, so the fix is proven in CI when this branch's pull request runs.
+was therefore a local run. Fixed in `74f82d8` (mode `100755`) and pushed straight to `main`. The first CI
+run that built anything, run #10 (`46076652325`, `main` at `c05b9b9`, whole job log read): 0 Checkstyle
+violations; Surefire 343, 0 failures; Failsafe 159, 0 failures; BUILD SUCCESS in 1:04 min. Its write-lock
+job was skipped, as on every push.
 
 **Full gate, orchestrator's run at `74f82d8`** (JDK 25.0.5, Docker 29.9, PostgreSQL 17): `./mvnw -B verify`
 → 0 Checkstyle violations; Surefire 343, 0 failures; Failsafe 159, 0 failures; BUILD SUCCESS. The
