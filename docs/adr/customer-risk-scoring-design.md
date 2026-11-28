@@ -639,3 +639,315 @@ fails closed). Recorded as deployment controls in AGENTS.md: distinct Flyway and
 session-role switching, no extra migration or callback locations, no `init-sqls`. Deferred: a startup
 self-check that the session runs as the validated, non-owning, non-superuser service role (needs the
 `@ServiceConnection` ITs on two roles first; same prerequisite as SR-03a).
+
+---
+
+## Addendum 2026-11-28: refusals name their field (OAS-01), one precision for moments (OAS-02), a contract test
+
+Source: the state board, section "2026-11-27: build wrapper fixed, full gate re-run, API contract
+drafted" (OAS-01, OAS-02) and its "Next" item 2. No new refusal, no new business rule, no migration.
+Everything not named here stays as designed.
+
+### A. OAS-01: three refusals name their field (BR-08, BR-09, BR-12)
+
+**Cause.** The domain already carries the field (`EvaluateCustomerRiskError.CountryInvalid(CountryField)`,
+`GeographicClassInvalid(CountryField)`, `CriticalFactMissing(CriticalFactField)`);
+`EvaluateCustomerRiskResource.refused` matches them with `_` and drops it.
+
+**Decision.** The problem gets one RFC 9457 extension member, **`field`**, at the top level beside `type`.
+Its value is the name of the request member the refusal is about, spelled as the request schema spells it.
+
+| Problem `type` | Rule | `field` | Domain value → `field` |
+|---|---|---|---|
+| `country-invalid` | BR-08, row 9 | required | `RESIDENCE` → `residence`, `CITIZENSHIP` → `citizenships`, `BIRTH` → `birth`, `LOGIN` → `loginCountry` |
+| `geographic-class-invalid` | BR-09, row 12 | required | `RESIDENCE` → `residence`, `CITIZENSHIP` → `citizenships`, `BIRTH` → `birth` |
+| `critical-fact-missing` | BR-12, row 16 | required | `SANCTIONS_MATCH` → `sanctionsMatch`, `TERRORIST_LINK` → `terroristLink`, `FORGED_IDENTITY` → `forgedIdentity` |
+| every other problem of all four operations | — | absent | — |
+
+1. **One value.** The first failure in catalogue order is the one refusal (A-27), so `field` names one
+   member: residence and login both invalid → `residence`.
+2. **A citizenship is named `citizenships`**, the member that holds them. BR-08 asks which of four
+   countries (residence, citizenship, birth, login), not which of several citizenships, so no position
+   is added (Q-1). A citizenship that is not an object is already `country-invalid` and is named the same.
+3. **BR-09 "naming the country"** is read as BR-08 spells it: which rated country, never the code sent
+   (Q-2). `loginCountry` never comes with `geographic-class-invalid`: the login country has no class, and
+   the parse never builds `GeographicClassInvalid(LOGIN)`.
+4. `detail` stays the constant sentence of its `type` and `instance` the constant of the operation (§10).
+5. **Stage 4, `adapters/web` only.** `ProblemResponses.of` gains an overload with `String field` that calls
+   `ProblemDetail.setProperty("field", field)`. Boot 4.1.2 registers `ProblemDetailJacksonMixin` on the
+   application `JsonMapper` (`JacksonAutoConfiguration.JsonProblemDetailsConfiguration`, only
+   `@ConditionalOnClass(ProblemDetail)`), so the member is written top level, with no `properties` member.
+   The resource maps each enum with one exhaustive `switch` (no `default`); its results are the same
+   constants `RequestBodies` reads the members by, one constant per member. The value never comes from the
+   request (not the key as sent, not `name().toLowerCase()`). The domain does not change.
+
+| Limit on a refusal | Why it holds |
+|---|---|
+| BR-41 | Only the onboarding system reaches the evaluation's input; every other role is refused 403 before the body is read (BR-02, BR-03). The value names an input, never its content: not the code, not the class, not whether a critical fact is yes. `critical-fact-missing` + `sanctionsMatch` says the answer is missing or not a boolean, nothing about a match |
+| BR-43 | Nothing new is logged (`adapters/web` has no logger). A member name is none of the data BR-43 lists |
+| §10 | `detail` and `instance` constant; `field` is one of seven server constants chosen by a `switch`; nothing sent is echoed |
+
+**Tests (stage 3),** in `RiskApiHardeningIT` (real Tomcat), each from a valid E3 body changed in one place:
+1. Ten cases, one per value in the table (the country `"QQ"`, not an ISO code; the class `"NO_SUCH_CLASS"`;
+   the critical fact `0`): 400, the `type`, `$.field` equal to the value, no `$.properties`, `detail` and
+   `instance` unchanged, and the body contains neither `QQ` nor `NO_SUCH_CLASS`.
+2. Residence and login both `"QQ"`: `field` is `residence`.
+3. A front-office caller sending an invalid country: 403, no `field`.
+4. No other problem has `field`: the contract test (C) checks it on every operation through closed schemas.
+
+### B. OAS-02: one precision for every recorded moment
+
+**Cause.** Both write use cases take `now = clock.instant()`; the bean is `Clock.systemUTC()`
+(`RiskModuleConfiguration`), with nanoseconds on Linux. `RiskProfileSqlAdapter.save` writes that `Instant`
+in one transaction as JSON text with all nine digits, and as `TIMESTAMPTZ`, microseconds, which pgjdbc
+42.7.14 rounds half-up (`TimestampUtils.nanosExceed499`: +1 µs when `nanos % 1000 > 499`, then truncates).
+`findOwn` reads `evaluated_at` back from the column, and the decision's view is built from that snapshot
+(`OutboxDocuments.view` → `snapshot.evaluatedAt()`): `…53.552410932Z` at version 1, `…53.552411Z` at 2.
+
+**Every moment the same cause affects.**
+
+| Moment | JSON copies (exact) | Column copies (rounded) | Effect today |
+|---|---|---|---|
+| Evaluation | outbox `payload.occurredAt`, outbox `view.evaluatedAt` | `risk_profile.evaluated_at` and `updated_at`, history `recorded_at`, outbox `created_at` | OAS-02: the first decision after an evaluation changes the view's `evaluatedAt`; later decisions keep the rounded value |
+| Decision | `risk_profile.latest_decision.decidedAt`, history `fact.decision.decidedAt`, outbox `payload.occurredAt` and `view.latestDecision.decidedAt` | `risk_profile.updated_at`, history `recorded_at`, outbox `created_at` | The view is stable (`decidedAt` comes back from JSON), but a history row's `recorded_at` differs from its own `fact`, and an outbox row's `created_at` from its payload |
+| Either, rounded up | — | — | A stored moment can be later than the clock reading: `2026-12-31T23:59:59.999999700Z` is stored as `2027-01-01T00:00:00Z` |
+
+Not affected: `projected_at`, `delivered_at`, `locked_until` (columns only, never served, never compared
+with a JSON copy) and the relay's order (`created_at, aggregate_version`: rounding is monotone).
+
+**Fix: the aggregate records moments to the microsecond.**
+1. `CustomerRiskProfile.create`, `reevaluate` and `decide` truncate the moment they are given, once, first:
+   `now.truncatedTo(RECORDED_PRECISION)`, with `static final ChronoUnit RECORDED_PRECISION = ChronoUnit.MICROS`
+   (package-private). Every copy is then the truncated value: `evaluatedAt`, `updatedAt`,
+   `EvaluationFact.recordedAt`, `DecisionRecord.decidedAt`, both events' `occurredAt`.
+2. Truncation, not rounding: never later than the reading; `Instant.truncatedTo` is the JDK's (§0.7).
+   `nanos % 1000 == 0`, so PostgreSQL stores exactly what the JSON says and pgjdbc never rounds.
+3. The `Clock` bean, the adapters and the schema do not change. Nothing stored needs migrating: with no
+   identity source, no production profile exists.
+
+Not the `Clock` bean (`Clock.tick(..., 1 µs)`): the domain tests and `RiskDatabaseSupport.evaluateAt` /
+`decideAt` give use cases their own `Clock`, so no test could see that fix, and the defect would show or
+not by the host clock's resolution. Not the adapter: truncating the columns leaves the JSON copies
+different, and truncating every copy repeats the fix in four documents. The aggregate is where all copies
+come from.
+
+**Invariants.** Clock readings: `T1 = 2026-11-27T21:52:53.552410932Z` (rounds up today),
+`T2 = 2026-11-27T21:53:23.811650417Z` (rounds down), `T3 = 2026-11-27T21:53:24.000000500Z`,
+`T4 = 2026-12-31T23:59:59.999999700Z`. R(T) = `T.truncatedTo(MICROS)`: `…53.552410Z`, `…23.811650Z`,
+`…21:53:24Z`, `2026-12-31T23:59:59.999999Z`. Steps: v1 evaluate E3 at T1; v2 escalate (L2, viewed 1) at
+T2; v3 freeze (viewed 2) at T3; v4 re-evaluate E3 at T4; relay after each.
+
+| # | Invariant |
+|---|---|
+| I-1 | The view's `evaluatedAt` is R(T1) at v1, v2 and v3, and R(T4) at v4 (OAS-02) |
+| I-2 | Every recorded moment is R(its reading): never later, never 1 µs or more earlier |
+| I-3 | One evaluation, one value: for v1 and v4, `risk_profile.evaluated_at` (while current), history `recorded_at`, outbox `created_at`, `payload.occurredAt`, `view.evaluatedAt`, and the query view's `evaluatedAt` are equal |
+| I-4 | One decision, one value: for v2 and v3, `risk_profile.updated_at` (while current) and `latest_decision.decidedAt`, history `recorded_at` and `fact.decision.decidedAt`, outbox `created_at`, `payload.occurredAt` and `view.latestDecision.decidedAt`, and the query view's `latestDecision.decidedAt` are equal |
+| I-5 | After v2 and v3, `evaluated_at` and the view's `evaluatedAt` equal the `occurredAt` of the v1 `CustomerRiskEvaluated` |
+| I-6 | With T4, nothing is recorded in 2027 |
+
+**Tests (stage 3).**
+1. Unit, Surefire: `EvaluateCustomerRiskUseCaseTest`, `RecordComplianceDecisionUseCaseTest` with `Clock.fixed`
+   at the readings and `InMemoryRiskProfileRepository` (`recordedFacts`, `announcedEvents`): I-2 and I-6 on
+   the snapshot, the fact and the event; after a decision `evaluatedAt` is still R(T1). Expected values are
+   literals (`Instant.parse("2026-11-27T21:52:53.552410Z")`), so no stub is needed.
+2. IT: a new `RecordedMomentIT extends RiskDatabaseSupport`, the steps above with `evaluateAt` / `decideAt`
+   and `relay(10).runOnce()`, I-1 to I-6 read with `JdbcClient` (columns, `->>` members) and the view reader.
+
+Today 1 fails (nine digits) and 2 fails at I-1 (v2), I-2, I-3, I-4, I-6. The contract types both moments as
+`Moment`, at most six fraction digits (D.5), so the contract test also sees a regression.
+
+### C. A contract test
+
+**Purpose.** Fail the build when the service and `openapi/customer-risk-scoring.yaml` disagree either way:
+the service answers what the contract does not describe, or the contract lists an answer never given.
+
+**Library.** `com.networknt:json-schema-validator:3.0.9`, scope `test`; and
+`tools.jackson.dataformat:jackson-dataformat-yaml`, scope `test`, no version (Boot 4.1.2's `jackson-bom`:
+3.1.7), declared because the test imports `YAMLMapper`.
+
+| Check | Result |
+|---|---|
+| Exists, old enough | `maven-metadata.xml` fetched with curl from `repo.maven.apache.org/maven2` on 2026-11-28: `latest` and `release` 3.0.9; its POM `Last-Modified: Tue, 03 Nov 2026 20:15:20 GMT` (25 days) |
+| Jackson 3 | 3.x depends on `tools.jackson.core:jackson-databind` and `tools.jackson.dataformat:jackson-dataformat-yaml` (3.0.9 POM: 3.1.8). 2.x and 1.x need `com.fasterxml.jackson.core:jackson-databind` (2.0.8 POM: 2.22.1; 1.5.9 POM: 2.18.3), which the repository bans: rejected |
+| Under Boot 4.1.2 | Both Jackson artifacts resolve to 3.1.7 (BOM). The test classpath gains only `json-schema-validator` 3.0.9, `com.ethlo.time:itu` 1.17.0, `jackson-dataformat-yaml` 3.1.7 and `org.snakeyaml:snakeyaml-engine` 3.0.1; no Jackson 2 databind |
+| OpenAPI 3.1, JSON Schema 2020-12 | `Dialects.getOpenApi31()`. A scratch spike outside the repository (JDK 25; this contract, and a copy with D.3 and D.4 applied) loaded the YAML, resolved `#/components/schemas/…` fragments, applied `unevaluatedProperties` through `allOf` / `$ref`, `oneOf`, and asserted `date-time`: 32 of 32 expectations met, including that today's contract accepts an added member |
+
+No gate checks imports in `src/test` (Checkstyle runs on `src/main`; every ArchUnit suite uses
+`DoNotIncludeTests`); the test still imports only `tools.jackson.*` and `com.networknt.schema.*`.
+Copilot-instructions §0.1 forbids adding a dependency to make a first idea work: this is the design
+decision it asks for. Nothing in `pom.xml` validates JSON Schema 2020-12, and hand-writing `oneOf`,
+`unevaluatedProperties` and formats is what §0.7 rejects.
+
+**Where.** `pom.xml`, test block after `archunit-junit5`, version in a property
+`json-schema-validator.version`, with a comment that 3.x is the Jackson 3 line. Added by `@test-designer`
+in stage 3 (the RED gate needs `test-compile`); see E.
+
+**The test:** `src/test/java/com/gs5/kycaml/risk/adapters/web/RiskApiContractIT.java`, with a package-private
+`OpenApiContract` beside it.
+1. **Service.** `@SpringBootTest(webEnvironment = RANDOM_PORT)`, PostgreSQL 17 by Testcontainers
+   `@ServiceConnection`, `app.booking-centres.0de00000-0000-0000-0000-00000000000d=DE`,
+   `app.outbox.relay.poll-interval=PT1H`. Requests through `java.net.http.HttpClient` to the real Tomcat,
+   as `RiskApiAdversarialIT`. Views are filled by `OutboxRelay.runOnce()` until it returns 0.
+2. **Caller.** A `@Primary ActorContextResolver` subclass overriding `resolve()` from a static volatile
+   `Optional<AuthenticatedCaller>` set per exchange, empty for 401 (as `RiskApiFlowIT`). `identify()` is not
+   overridden, so the booking-centre check stays real.
+3. **Concurrent change, deterministic.** A `@Primary RiskProfileRepository` wraps the real
+   `RiskProfileSqlAdapter`. Armed for one customer number, `findOwn` returns what the adapter read and then
+   raises that profile's `version` by one with a SQL `UPDATE`; the use case's guarded update changes nothing
+   and the real path answers 409 `risk-profile-changed-concurrently`. Disarmed, it only delegates (the same
+   idea as `InMemoryRiskProfileRepository`'s one-shot interference).
+4. **Contract.** Read `openapi/customer-risk-scoring.yaml` from the module directory (Failsafe's working
+   directory), navigate it with `YAMLMapper`, validate with
+   `SchemaRegistry.withDefaultDialect(Dialects.getOpenApi31(), b -> b.schemas(Map.of(IRI, text))
+   .schemaRegistryConfig(SchemaRegistryConfig.builder().formatAssertionsEnabled(true).build()))`, `IRI`
+   ending in `.yaml` (the registry reads YAML by suffix). Operations are found by `operationId` and URLs built
+   from their path template, so a route renamed on one side only gets 404 `request-not-handled`, which no
+   operation lists. Response schemas are `$ref`s to `#/components/schemas/<Name>` (all are today), loaded as
+   `IRI#/components/schemas/<Name>`; an inline one fails the test by name.
+
+**Exchanges** (E1, E3, E7 are the spec's examples; DE booking centre):
+
+| Operation | Status | How (each listed problem `type` at least once) |
+|---|---|---|
+| `evaluateCustomerRisk` | 200 | onboarding system, E3, new number |
+| | 400 | `request-not-readable` (`[]`); `customer-number-too-long` (65 code points); `customer-number-control-character` (`%7F`); `profile-class-not-recognised`; `country-invalid` ×4, `geographic-class-invalid` ×3, `critical-fact-missing` ×3 (A); `no-citizenship` (`[]`); `too-many-citizenships` (11); `channel-not-recognised`; `product-request-missing` (`0`); `adverse-media-class-not-recognised` |
+| | 401 · 403 · 409 · 413 | no caller · front office · re-evaluation, repository armed · 65 537 bytes |
+| `recordComplianceDecision` | 200 | L2 freezes v1 |
+| | 400 | `request-not-readable`; `decision-kind-not-recognised` (L2, kind `X`); `justification-missing`, `-too-short` (19), `-too-long` (2 001), `-control-character` (TAB); `version-viewed-not-valid` (`1.9`) |
+| | 401 · 403 · 404 | no caller · L1 freezes · unknown number |
+| | 409 | `risk-profile-changed-since-viewed` (viewed 7); `risk-profile-changed-concurrently` (armed) |
+| | 413 · 422 | 16 385 bytes · `critical-fact-in-force` (clear E7), `already-frozen`, `already-escalated`, `nothing-to-clear` |
+| `getComplianceRiskView` | 200 | E3 at v1 (no decision); E3 after a freeze; E7 |
+| | 401 · 403 · 404 | no caller · front office · unknown number |
+| `getFrontOfficeStatus` | 200 | front office: E1 (`ACTIVE`), E3 (`VERIFICATION_PENDING`) |
+| | 401 · 404 | no caller · unknown number |
+
+**Each exchange fails the test, naming operation, status and the library's messages, when:**
+1. the status is not a key of the operation's `responses`;
+2. the media type (without parameters) is not a key of that response's `content`;
+3. a header the response declares `required: true` is missing or fails its schema (`Cache-Control: no-store`);
+4. the body fails the response schema. With the closed schemas of D: a member added
+   (`unevaluatedProperties: false`), removed (`required`), retyped (`type`, `enum`, `const`, `format`,
+   `pattern`), a `type` this operation and status do not list, a `field` on the wrong problem;
+5. in a 200 compliance view, a number at a member the contract types `integer` (`points`, `version`,
+   `versionTaken`) is not an integer token, or any other number is not a decimal with exactly two fraction
+   digits (read with `DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS`, `scale() == 2`). JSON Schema
+   cannot tell `51.0` from `51.00`; the contract says two places.
+
+**After all exchanges** the observed (operation, status, `type`) set must equal the contract's (for 200:
+operation and status), so the contract cannot keep a dead entry. The only exception is a named set
+`NOT_REACHABLE_OVER_HTTP`, each entry with its reason. Expected entry: `evaluateCustomerRisk` 400
+`customer-number-missing` (an empty segment does not match `{customerNumber}`); stage 3 confirms it with
+`//evaluations` and `/;/evaluations` and records what they answer.
+
+**Self-checks, before the exchanges,** because a validator that accepts everything is green while checking
+nothing (the ArchUnit 1.4.0 lesson in AGENTS.md):
+1. the contract has exactly the four `operationId`s;
+2. every response `example` and `examples.*.value` validates against its response schema;
+3. the loaded schemas refuse: `yellowAfterFreeze` plus a member `id`; it without `version`; it with
+   `totalScore` as a string; it with a nine-digit `evaluatedAt`; `country-invalid` without `field`;
+   `no-citizenship` with one. The status check refuses 500 for `getFrontOfficeStatus`.
+
+Not covered: container errors and Tomcat's own 400s (prose only in the contract); request schemas stay
+open, but every success body the test sends validates against its request schema first.
+
+At stage 3 it fails on the three `field` types and, on a clock with sub-microsecond digits, on `Moment`;
+every other exchange passes, which is right: the contract describes what runs.
+
+### D. The change to `openapi/customer-risk-scoring.yaml`
+
+1. `info.version` 0.1.0 → 0.2.0.
+2. `info.description`, Refusals: "Three refusals of the evaluation also carry `field`, the request member
+   they are about: `country-invalid`, `geographic-class-invalid` and `critical-fact-missing` (BR-08, BR-09,
+   BR-12). No other problem has it." Responses: "Moments are UTC, ISO 8601, to the microsecond at most. A
+   response has exactly the members listed here."
+3. Replace `EvaluationInputProblem` (the evaluate 400 keeps its `$ref`):
+   ```yaml
+   EvaluationInputProblem:
+     description: Every 400 of the evaluation; `type` decides which branch applies.
+     oneOf:
+       - $ref: '#/components/schemas/EvaluationGeneralInputProblem'
+       - $ref: '#/components/schemas/CountryInvalidProblem'
+       - $ref: '#/components/schemas/GeographicClassInvalidProblem'
+       - $ref: '#/components/schemas/CriticalFactMissingProblem'
+   EvaluationGeneralInputProblem:
+     description: A 400 of the evaluation whose `type` alone says what is wrong. It has no `field`.
+     allOf:
+       - $ref: '#/components/schemas/Problem'
+     properties:
+       type:
+         enum:   # today's ten other codes
+           - urn:problem-type:risk:request-not-readable
+           - urn:problem-type:risk:customer-number-missing
+           - urn:problem-type:risk:customer-number-too-long
+           - urn:problem-type:risk:customer-number-control-character
+           - urn:problem-type:risk:profile-class-not-recognised
+           - urn:problem-type:risk:no-citizenship
+           - urn:problem-type:risk:too-many-citizenships
+           - urn:problem-type:risk:channel-not-recognised
+           - urn:problem-type:risk:product-request-missing
+           - urn:problem-type:risk:adverse-media-class-not-recognised
+       status:
+         const: 400
+     unevaluatedProperties: false
+   CountryInvalidProblem:
+     description: BR-08. `field` names the request member whose country is missing or not valid.
+     allOf:
+       - $ref: '#/components/schemas/Problem'
+     required: [field]
+     properties:
+       type:
+         const: urn:problem-type:risk:country-invalid
+       status:
+         const: 400
+       field:
+         type: string
+         enum: [residence, citizenships, birth, loginCountry]
+     unevaluatedProperties: false
+   ```
+   `GeographicClassInvalidProblem` (BR-09) and `CriticalFactMissingProblem` (BR-12) are the same with
+   `type` `urn:problem-type:risk:geographic-class-invalid`, `field` enum `[residence, citizenships, birth]`,
+   and `urn:problem-type:risk:critical-fact-missing`, `[sanctionsMatch, terroristLink, forgedIdentity]`.
+4. `unevaluatedProperties: false` at the top level of every other response schema: `RiskVersionResponse`,
+   `ComplianceRiskView`, `JurisdictionPolicy`, `Explanation`, `CategoryContribution`, `DecisionRecord`,
+   `FrontOfficeStatusView`, `CallerNotIdentifiedProblem`, `PermissionDeniedProblem`, `CustomerNotFoundProblem`,
+   `RequestTooLargeProblem`, `EvaluationConflictProblem`, `DecisionInputProblem`, `DecisionConflictProblem`,
+   `DecisionRuleProblem`. `Problem` stays open (closing it would refuse `field` under `allOf`); request
+   schemas stay open (unknown fields are ignored).
+5. A new schema, used through `allOf` by `ComplianceRiskView.evaluatedAt` and `DecisionRecord.decidedAt`:
+   ```yaml
+   Moment:
+     type: string
+     format: date-time
+     pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?Z$'
+     description: A UTC moment, to the microsecond at most.
+   ```
+6. Evaluate 400: the description adds "`country-invalid`, `geographic-class-invalid` and
+   `critical-fact-missing` name the member in `field`"; example `countryInvalid` gets `field: loginCountry`,
+   `criticalFactMissing` gets `field: terroristLink`.
+7. View examples to microseconds: `evaluatedAt` `2026-11-27T21:52:53.552410Z` and
+   `2026-11-27T21:52:53.625363Z`, `decidedAt` `2026-11-27T21:52:53.811650Z`.
+
+### E. Who changes what in this round
+
+| Stage | Agent | Writes |
+|---|---|---|
+| 3 | `@test-designer` | `src/test/` (A, B, C); `openapi/customer-risk-scoring.yaml` (D: the contract the test executes); `pom.xml`, only the two test-scoped dependencies and the property of C. The last two are outside its usual list and are named here for that reason |
+| 4 | `@developer` | `src/main/` only: `EvaluateCustomerRiskResource`, `ProblemResponses`, `RequestBodies` (A.5); `CustomerRiskProfile` (B). `openapi/` and `pom.xml` are read-only, like `src/test/` |
+| — | orchestrator | `check-write-lock.sh green` watches `src/test` and `docs` only: check `git diff <stage-3 commit> -- openapi pom.xml` is empty by hand, and that the stage 3 `pom.xml` diff is exactly C |
+
+AGENTS.md says a change of a field changes the contract in the same commit. With a contract test, that is
+the stage 3 commit, together with the test that fails for it.
+
+RED gate of this round: `./mvnw test` fails on B.1; `./mvnw verify` also fails on A, B.2 and C (the three
+`field` types).
+
+### Open questions for the product owner
+
+- **Q-1.** Should a refusal about a citizenship also say which one (its position in the list)? BR-08 asks
+  which of the four countries only, so the design names `citizenships`. A position would be a new member
+  next to `field`, not a change of it.
+- **Q-2.** BR-09 says "naming the country". The design reads it as BR-08 does, which rated country
+  (residence, citizenship, birth), never the code sent, which would echo personal input (§6 of the spec,
+  §10 here). Confirm.
