@@ -722,8 +722,10 @@ with a JSON copy) and the relay's order (`created_at, aggregate_version`: roundi
    `EvaluationFact.recordedAt`, `DecisionRecord.decidedAt`, both events' `occurredAt`.
 2. Truncation, not rounding: never later than the reading; `Instant.truncatedTo` is the JDK's (§0.7).
    `nanos % 1000 == 0`, so PostgreSQL stores exactly what the JSON says and pgjdbc never rounds.
-3. The `Clock` bean, the adapters and the schema do not change. Nothing stored needs migrating: with no
-   identity source, no production profile exists.
+3. The `Clock` bean, the adapters and the schema do not change. Nothing stored needs migrating (corrected
+   2026-11-28: an identity source now exists, so profiles can exist): the columns already hold microseconds,
+   and truncation only changes the moments of new facts. An older profile whose JSON copy has nanoseconds keeps
+   showing the rounded column value; no invariant of this addendum depends on it.
 
 Not the `Clock` bean (`Clock.tick(..., 1 µs)`): the domain tests and `RiskDatabaseSupport.evaluateAt` /
 `decideAt` give use cases their own `Clock`, so no test could see that fix, and the defect would show or
@@ -986,8 +988,9 @@ override `resolve()`.
 | `app.identity.booking-centre-claim` | `booking_centre` | an optional claim from a directory extension attribute, renamed in the token configuration |
 
 The claim value must have the expected JSON type: the actor claim a string; the role claim a string or an
-array of strings; the booking-centre claim a string. Roles that are not `ActorRole` names are ignored;
-exactly one `ActorRole` must remain (D-15), else no caller. The booking centre must be a canonical UUID
+array of strings; the booking-centre claim a string. A role value that is not exactly one `ActorRole` name
+refuses the token (D-23, corrected 2026-11-28; this section first said such roles are ignored), and exactly one
+`ActorRole` must be named (D-15), else no caller. The booking centre must be a canonical UUID
 (`ActorContext.parse`) and in scope (`identify()`, D-16). Any other outcome is `Optional.empty()`, i.e. 401.
 
 **Where.** `ActorContextResolver.resolve()` reads the `JwtAuthenticationToken` from the security context
@@ -1090,3 +1093,29 @@ and that risk is accepted for onboarding.
 This is a **deployment control**, not code: AGENTS.md lists it beside the D-11 controls. It must be enforced
 by the network (no route from outside to this service, or mTLS), and it must be checked at deployment.
 Customer-facing callers keep the BFF direction above.
+
+---
+
+## Addendum 2026-11-28 (2): review of the merged lines
+
+Source: the independent code and security reviews of the merge `d2bd785` (state board, same date). Written
+by the orchestrator, not by `@architect`, because every item below is already decided by a spec decision
+or is a configuration bound; nothing here is a new business rule. Items that need a design are not here;
+they are listed on the board as open.
+
+| # | Review | Design for stage 3 and 4 |
+|---|---|---|
+| 1 | CR-01, SR-02 (D-23) | `CallerClaims`: the role claim yields a caller only when it holds exactly one value and that value is an `ActorRole` name. Any other value, of this or another application, is no caller (401). `IdentityIT.shouldIgnoreForeignRoles` is replaced by a bad-token case |
+| 2 | CR-08, SR-05 | `IdentitySettings` refuses `issuer-uri` and `jwk-set-uri` that are not `https://`, except a loopback host (`127.0.0.1`, `localhost`, `[::1]`) over `http://`, which the tests use. The message names the setting and never prints the URL. The test settings keep working |
+| 3 | SR-04 | Every not-identified answer has the same HTTP framing, whoever writes it: the filter's refusal uses the same writing path as `ProblemResponses.notIdentified()`, so `Content-Length` and `Transfer-Encoding` agree across no token, a forged token and unusable claims. A raw-socket test compares the header names of all cases (without `Date`) |
+| 4 | CR-04, SR-09 (D-21) | New property `app.identity.key-cache-ttl` (ISO-8601 duration), required, at most `PT5M`, never above it; it is the Nimbus cache time-to-live, set explicitly. Missing or too large stops startup with a message naming the property. `ProductionIdentitySettingsTest` pins it in the shipped `application.yml` |
+| 5 | CR-03, SR-03 (D-36, D-24) | A request with **no authenticated bearer principal**, using `OPTIONS` or a method the route does not take, on one of the four routes, gets the constant not-identified answer (401, same body, headers and framing as item 3), before Spring MVC. A request with a valid token behaves as before. `TRACE` and `OPTIONS *` stay container refusals (D-36). Unknown paths stay the constant 404. Residual, accepted and recorded: a valid token with unusable claims is not identified, yet reaches MVC on a wrong method |
+| 6 | CR-07 | A unit test of `ConfiguredIdentityValidator` that fails when the issuer or audience guard is removed, and a startup test that asserts the message text of the `jwk-set-uri` constraint, not the word `jwk` |
+| 7 | CR-05, CR-06, CR-09, CR-10 | One contract: `openapi/customer-risk-scoring.yaml` is authoritative; `openapi/risk-profiles.yaml` is removed (its history stays in git) after its security scheme is taken over as `bearerAuth` (HTTP bearer, JWT). 401 examples use `instance` `/api/risk-profiles` and `WWW-Authenticate: Bearer`; "today every call is 401" prose goes; decisions state that the body is read before the role (BR-37, D-08); the 400 for `//` and `/a/../b` is described; unauthenticated `OPTIONS` and wrong methods are 401 (item 5) |
+
+**Out of this round, open.** D-19 (application check; onboarding registration; the onboarding booking centre
+from the registration), D-20 and D-28 (mutual TLS), D-25 (the identification step for the BFF), D-30 (role
+Operations), SR-06 and SR-07 (Entra tenant setup: who may write the booking-centre attribute; ID token against
+access token), SR-08 (no maximum token lifetime), and Spring Boot 4.1.3 (patch release). The `ARCHITECT`
+decides D-19's registration shape first: the spec leaves open where an application-only token gets its
+booking centre.
